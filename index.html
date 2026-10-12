@@ -246,6 +246,31 @@ mark.mk-vermelho{background:rgba(229,72,77,.40)} :root[data-theme="light"] mark.
   #seg-ferr button{padding:7px 9px;font-size:13px}
   .cor{width:28px;height:28px}
 }
+/* modal */
+.modal-fundo{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:80;display:flex;align-items:center;justify-content:center;padding:16px}
+.modal{background:var(--card);border:1px solid var(--linha);border-radius:18px;box-shadow:var(--sombra);width:min(640px,100%);max-height:calc(100vh - 32px);overflow:auto;padding:22px}
+.modal h2{font-family:Cinzel,serif;color:var(--ouro);font-size:20px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.modal .sub{color:var(--txt2);font-size:14px;margin-bottom:14px}
+.total{font-size:44px;font-weight:700;font-variant-numeric:tabular-nums;text-align:center;margin:6px 0 14px}
+.barras{display:flex;flex-direction:column;gap:9px;margin-bottom:16px}
+.barra-t{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;font-size:15px}
+.barra-t .nome{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.barra-t .t{font-variant-numeric:tabular-nums;font-weight:700}
+.barra-t .trilho{grid-column:1/-1;height:8px;border-radius:4px;background:var(--bg2);overflow:hidden}
+.barra-t .trilho i{display:block;height:100%;border-radius:4px;background:var(--ouro)}
+.campos{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.campos .largo{grid-column:1/-1}
+.modal .acoes{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+.hist-item{border-top:1px solid var(--linha);padding:12px 0}
+.hist-item:first-child{border-top:0}
+.hist-cab{display:flex;justify-content:space-between;gap:10px;align-items:baseline;cursor:pointer}
+.hist-cab b{font-variant-numeric:tabular-nums;white-space:nowrap}
+.hist-tit{font-family:Cinzel,serif;color:var(--ouro);font-size:15px}
+.hist-meta{font-size:13.5px;color:var(--txt2);margin-top:2px}
+.hist-det{display:none;margin-top:10px}
+.hist-item.aberto .hist-det{display:block}
+.meta.pregado{color:var(--ouro)}
+@media (max-width:600px){ .campos{grid-template-columns:1fr} .total{font-size:36px} .modal{padding:18px} }
 </style>
 </head>
 <body>
@@ -262,6 +287,10 @@ mark.mk-vermelho{background:rgba(229,72,77,.40)} :root[data-theme="light"] mark.
     </div>
     <span id="sinc" class="sinc"><i></i><span>—</span></span>
     <button class="icone" data-tema title="Modo claro/escuro"></button>
+    <button class="btn" id="btn-historico" title="Histórico de pregações">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>
+      <span class="rl">Histórico</span>
+    </button>
     <button class="btn prim" id="btn-novo">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
       <span class="rl">Novo sermão</span><span class="rc">Novo</span>
@@ -397,19 +426,21 @@ mark.mk-vermelho{background:rgba(229,72,77,.40)} :root[data-theme="light"] mark.
   <div class="opc"><label class="rot">Alinhamento</label>
     <div class="seg" id="seg-al"><button data-v="left">À esquerda</button><button data-v="justify">Justificado</button></div></div>
   <div class="opc"><label class="rot">Cronômetro</label>
-    <button class="btn" id="cron-zerar" style="width:100%;justify-content:center">Zerar cronômetro</button>
-    <p class="dica">Azul até 30 min · amarelo de 30 a 40 · laranja de 40 a 50 · vermelho a partir de 50.</p></div>
+    <button class="btn" id="cron-zerar" style="width:100%;justify-content:center">Encerrar pregação / zerar</button>
+    <p class="dica">Azul até 30 min · amarelo de 30 a 40 · laranja de 40 a 50 · vermelho a partir de 50. Segurar o cronômetro por 1 segundo também encerra.</p></div>
+  <div class="opc"><label class="rot">Controle de apresentação</label><p class="dica">Avançar (→ / Page Down): próximo tópico · Voltar (← / Page Up): tópico anterior · Botão de tela preta (B ou .): inicia/pausa o cronômetro.</p></div>
   <div class="opc"><label class="rot">Tela</label><p class="dica" id="tela-status">—</p></div>
   <p class="versao" data-versao></p>
 </aside>
 
+<div id="modal" class="modal-fundo oculto"><div class="modal" id="modal-caixa"></div></div>
 <div id="aviso"></div>
 
 <script>
 /* ============================================================
    PREGADOR — púlpito digital do Bispo
    ============================================================ */
-const VERSAO = '1.4.0';
+const VERSAO = '1.5.0';
 
 // Banco de dados (projeto quiz-biblico, schema "pregador") — já configurado
 const SB_URL = 'https://ghjbljypxksubmcsvaig.supabase.co';
@@ -449,11 +480,12 @@ let _db;
 function abrirDB(){
   if (_db) return Promise.resolve(_db);
   return new Promise((ok, erro) => {
-    const r = indexedDB.open('pregador', 1);
+    const r = indexedDB.open('pregador', 2);
     r.onupgradeneeded = () => {
       const d = r.result;
       if (!d.objectStoreNames.contains('sermoes')) d.createObjectStore('sermoes', { keyPath: 'id' });
       if (!d.objectStoreNames.contains('textos')) d.createObjectStore('textos', { keyPath: 'chave' });
+      if (!d.objectStoreNames.contains('pregacoes')) d.createObjectStore('pregacoes', { keyPath: 'id' });
     };
     r.onsuccess = () => { _db = r.result; ok(_db); };
     r.onerror = () => erro(r.error);
@@ -472,50 +504,49 @@ function statusSinc(tipo, txt){
 }
 const limpar = o => { const c = { ...o }; delete c._pendente; return c; };
 
+const TABELAS = [
+  { loja: 'sermoes',   chave: 'id' },
+  { loja: 'textos',    chave: 'chave' },
+  { loja: 'pregacoes', chave: 'id' }
+];
+let avisouTabela = false;
+async function sincTabela({ loja, chave }){
+  // 1) envia o que foi alterado sem internet
+  const pend = (await dbTodos(loja)).filter(x => x._pendente);
+  if (pend.length){
+    const r = await fetch(`${SB_URL}/rest/v1/${loja}?on_conflict=${chave}`, { method: 'POST', headers: { ...cab(), Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(pend.map(limpar)) });
+    if (!r.ok) throw new Error(loja + ' ' + r.status + ' ' + await r.text());
+    await dbGravar(loja, pend.map(x => ({ ...x, _pendente: false })));
+  }
+  // 2) baixa o que está na nuvem (outros aparelhos)
+  const r = await fetch(`${SB_URL}/rest/v1/${loja}?select=*`, { headers: cab() });
+  if (!r.ok) throw new Error('baixar ' + loja + ' ' + r.status + ' ' + await r.text());
+  const nuvem = await r.json();
+  const loc = Object.fromEntries((await dbTodos(loja)).map(x => [x[chave], x]));
+  const novos = nuvem.filter(n => { const l = loc[n[chave]]; return !l || (!l._pendente && new Date(n.atualizado_em) > new Date(l.atualizado_em)); }).map(n => ({ ...n, _pendente: false }));
+  if (novos.length) await dbGravar(loja, novos);
+  return novos.length;
+}
 async function sincronizar(){
   if (sincronizando) return;
   if (!navigator.onLine){ await mostrarPendencias(); return; }
   sincronizando = true; statusSinc('', 'Sincronizando…');
-  try {
-    // 1) envia o que foi alterado sem internet
-    const sermoes = await dbTodos('sermoes');
-    const textos = await dbTodos('textos');
-    const sPend = sermoes.filter(s => s._pendente);
-    const tPend = textos.filter(t => t._pendente);
-    if (sPend.length){
-      const r = await fetch(`${SB_URL}/rest/v1/sermoes?on_conflict=id`, { method: 'POST', headers: { ...cab(), Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(sPend.map(limpar)) });
-      if (!r.ok) throw new Error('sermoes ' + r.status + ' ' + await r.text());
-      await dbGravar('sermoes', sPend.map(s => ({ ...s, _pendente: false })));
+  let falhas = 0, mudou = 0;
+  for (const t of TABELAS){
+    try { mudou += await sincTabela(t); }
+    catch (e) {
+      console.error(e); falhas++;
+      const m = String(e.message);
+      if (m.includes('PGRST106')) aviso('O schema "pregador" ainda não está liberado no Supabase (veja as instruções).', 6000);
+      else if (t.loja === 'pregacoes' && (m.includes('PGRST205') || m.includes('42P01') || m.includes(' 404 ')) && !avisouTabela){ avisouTabela = true; aviso('Falta criar a tabela do histórico no Supabase (rode o schema-v1.5.sql). Por enquanto o histórico fica só no aparelho.', 7000); }
     }
-    if (tPend.length){
-      const r = await fetch(`${SB_URL}/rest/v1/textos?on_conflict=chave`, { method: 'POST', headers: { ...cab(), Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(tPend.map(limpar)) });
-      if (!r.ok) throw new Error('textos ' + r.status + ' ' + await r.text());
-      await dbGravar('textos', tPend.map(t => ({ ...t, _pendente: false })));
-    }
-    // 2) baixa o que está na nuvem (outros aparelhos)
-    const [rs, rt] = await Promise.all([
-      fetch(`${SB_URL}/rest/v1/sermoes?select=*`, { headers: cab() }),
-      fetch(`${SB_URL}/rest/v1/textos?select=*`, { headers: cab() })
-    ]);
-    if (!rs.ok) throw new Error('baixar sermoes ' + rs.status + ' ' + await rs.text());
-    if (!rt.ok) throw new Error('baixar textos ' + rt.status + ' ' + await rt.text());
-    const nuvemS = await rs.json(), nuvemT = await rt.json();
-    const locS = Object.fromEntries((await dbTodos('sermoes')).map(s => [s.id, s]));
-    const locT = Object.fromEntries((await dbTodos('textos')).map(t => [t.chave, t]));
-    const novosS = nuvemS.filter(n => { const l = locS[n.id]; return !l || (!l._pendente && new Date(n.atualizado_em) > new Date(l.atualizado_em)); }).map(n => ({ ...n, _pendente: false }));
-    const novosT = nuvemT.filter(n => { const l = locT[n.chave]; return !l || (!l._pendente && new Date(n.atualizado_em) > new Date(l.atualizado_em)); }).map(n => ({ ...n, _pendente: false }));
-    if (novosS.length) await dbGravar('sermoes', novosS);
-    if (novosT.length) await dbGravar('textos', novosT);
-    statusSinc('', 'Salvo na nuvem');
-    if (novosS.length && $('#inicio').classList.contains('ativa')) desenharLista();
-  } catch (e) {
-    console.error(e);
-    statusSinc('pend', 'Sem conexão com o banco');
-    if (String(e.message).includes('PGRST106') || String(e.message).includes('schema')) aviso('O schema "pregador" ainda não está liberado no Supabase (veja as instruções).', 6000);
-  } finally { sincronizando = false; }
+  }
+  statusSinc(falhas ? 'pend' : '', falhas ? 'Sem conexão com o banco' : 'Salvo na nuvem');
+  sincronizando = false;
+  if (mudou && $('#inicio').classList.contains('ativa')) desenharLista();
 }
 async function mostrarPendencias(){
-  const p = (await dbTodos('sermoes')).some(s => s._pendente) || (await dbTodos('textos')).some(t => t._pendente);
+  let p = false; for (const t of TABELAS) if ((await dbTodos(t.loja)).some(x => x._pendente)) p = true;
   statusSinc(p ? 'pend' : 'off', p ? 'Sem internet · envio pendente' : 'Sem internet · tudo salvo no aparelho');
 }
 window.addEventListener('online', sincronizar);
@@ -532,6 +563,9 @@ function fmtData(d){ if (!d) return 'Sem data'; const [a, m, dia] = d.split('-')
 async function desenharLista(){
   const termo = chaveRef($('#busca').value).replace(/\./g, '');
   let lista = (await dbTodos('sermoes')).filter(s => !s.excluido);
+  const hist = {};
+  (await dbTodos('pregacoes')).filter(h => !h.excluido).forEach(h => (hist[h.sermao_id] = hist[h.sermao_id] || []).push(h));
+  Object.values(hist).forEach(v => v.sort((a, b) => (b.data || '').localeCompare(a.data || '') || (b.criado_em || '').localeCompare(a.criado_em || '')));
   lista.sort((a, b) => (b.data_pregacao || '').localeCompare(a.data_pregacao || '') || (b.atualizado_em || '').localeCompare(a.atualizado_em || ''));
   if (termo) lista = lista.filter(s => chaveRef([s.titulo, s.culto, ...(s.textos || []).map(t => t.ref)].join(' ')).replace(/\./g, '').includes(termo));
   const el = $('#lista');
@@ -546,11 +580,13 @@ async function desenharLista(){
       <h3>${esc(s.titulo)}</h3>
       <div class="meta">${fmtData(s.data_pregacao)}${s.culto ? ' · ' + esc(s.culto) : ''}${(s.textos || []).length ? ' · ' + s.textos.length + ' texto(s)' : ''}${s._pendente ? ' · <span style="color:var(--t-amarelo)">envio pendente</span>' : ''}</div>
       ${s.textos && s.textos[s.base_idx || 0] ? `<div class="meta">Base: <b>${esc(s.textos[s.base_idx || 0].ref)}</b></div>` : ''}
+      ${hist[s.id] ? `<div class="meta pregado">Pregado ${hist[s.id].length}× · último em ${fmtData(hist[s.id][0].data)}${hist[s.id][0].culto ? ' (' + esc(hist[s.id][0].culto) + ')' : ''}${hist[s.id][0].local ? ' · ' + esc(hist[s.id][0].local) : ''}</div>` : ''}
       <div class="acoes">
         <button class="btn prim" data-pregar="${s.id}">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Pregar
         </button>
         <button class="btn" data-editar="${s.id}">Editar</button>
+        ${hist[s.id] ? `<button class="btn" data-hist="${s.id}">Histórico</button>` : ''}
       </div>
     </div>`).join('');
 }
@@ -558,6 +594,7 @@ $('#busca').addEventListener('input', desenharLista);
 $('#lista').addEventListener('click', e => {
   const p = e.target.closest('[data-pregar]'); if (p) return abrirPulpito(p.dataset.pregar);
   const ed = e.target.closest('[data-editar]'); if (ed) return abrirEditor(ed.dataset.editar);
+  const hi = e.target.closest('[data-hist]'); if (hi) return abrirHistorico(hi.dataset.hist);
 });
 
 /* ===================== EDITOR ===================== */
@@ -1000,7 +1037,19 @@ function fmtTempo(ms){
   const t = Math.floor(ms / 1000), h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = t % 60;
   return (h ? h + ':' + String(m).padStart(2, '0') : String(m).padStart(2, '0')) + ':' + String(s).padStart(2, '0');
 }
+// sessão de pregação: tempo gasto em cada tópico
+let sessao = lerLS('pregador.sessao', null);   // { sermaoId, titulo, culto, tempos:{idx:ms}, nomes:{idx:nome} }
+let ultimoTick = Date.now(), contaGravar = 0;
+function contarTopico(){
+  const agoraMs = Date.now(), dt = agoraMs - ultimoTick; ultimoTick = agoraMs;
+  if (!cron.inicio || !sessao || !pAtual || pAtual.id !== sessao.sermaoId || !$('#pulpito').classList.contains('ativa')) return;
+  const i = topicos._atual ?? -1, k = String(i);
+  sessao.tempos[k] = (sessao.tempos[k] || 0) + dt;
+  if (!sessao.nomes[k]) sessao.nomes[k] = i < 0 ? 'Abertura' : topicos[i].textContent.trim();
+  if (++contaGravar % 8 === 0) gravarLS('pregador.sessao', sessao);
+}
 function tick(){
+  contarTopico();
   const d = new Date();
   $('#hora').textContent = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
   const ms = decorrido(), min = ms / 60000;
@@ -1014,20 +1063,150 @@ function tick(){
 setInterval(tick, 250); tick();
 function alternarCron(){
   if (cron.inicio){ cron.acumulado += Date.now() - cron.inicio; cron.inicio = null; aviso('Cronômetro pausado'); }
-  else { cron.inicio = Date.now(); if (!cron.acumulado) aviso('Cronômetro iniciado'); }
+  else {
+    cron.inicio = Date.now(); ultimoTick = Date.now();
+    if (!cron.acumulado){
+      aviso('Cronômetro iniciado');
+      if (pAtual && $('#pulpito').classList.contains('ativa')) sessao = { sermaoId: pAtual.id, titulo: pAtual.titulo, culto: pAtual.culto || '', tempos: {}, nomes: {} };
+    }
+    gravarLS('pregador.sessao', sessao);
+  }
   gravarLS('pregador.cron', cron); tick();
 }
-function zerarCron(){ cron = { inicio: null, acumulado: 0 }; gravarLS('pregador.cron', cron); tick(); aviso('Cronômetro zerado'); }
+function zerarCron(msg = 'Cronômetro zerado'){ cron = { inicio: null, acumulado: 0 }; sessao = null; gravarLS('pregador.cron', cron); gravarLS('pregador.sessao', null); tick(); aviso(msg); }
 // toque = iniciar/pausar · segurar 1 segundo = zerar
 (() => {
   const el = $('#cron'); let t, segurou = false;
-  const ini = () => { segurou = false; t = setTimeout(() => { segurou = true; if (decorrido() > 0 && confirm('Zerar o cronômetro?')) zerarCron(); }, 900); };
+  const ini = () => { segurou = false; t = setTimeout(() => { segurou = true; if (decorrido() > 0) encerrar(); }, 900); };
   const fim = () => clearTimeout(t);
   el.addEventListener('pointerdown', ini); el.addEventListener('pointerup', fim); el.addEventListener('pointerleave', fim); el.addEventListener('pointercancel', fim);
   el.addEventListener('click', () => { if (!segurou) alternarCron(); segurou = false; });
   el.addEventListener('contextmenu', e => e.preventDefault());
 })();
-$('#cron-zerar').addEventListener('click', () => { if (confirm('Zerar o cronômetro?')) zerarCron(); });
+$('#cron-zerar').addEventListener('click', () => { abrirPainel(false); if (decorrido() > 0) encerrar(); else aviso('O cronômetro já está zerado'); });
+
+/* ===================== ENCERRAR PREGAÇÃO / HISTÓRICO ===================== */
+function fmtDur(ms){
+  const t = Math.round(ms / 1000), h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), sg = t % 60;
+  if (h) return `${h}h ${String(m).padStart(2, '0')}min`;
+  if (m) return `${m} min${sg ? ' ' + String(sg).padStart(2, '0') + ' s' : ''}`;
+  return `${sg} s`;
+}
+function hojeISO(){ const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+function abrirModal(html){ $('#modal-caixa').innerHTML = html; $('#modal').classList.remove('oculto'); }
+function fecharModal(){ $('#modal').classList.add('oculto'); $('#modal-caixa').innerHTML = ''; }
+$('#modal').addEventListener('click', e => { if (e.target.id === 'modal') fecharModal(); });
+
+function htmlBarras(topicosLista, total){
+  const max = Math.max(...topicosLista.map(t => t.seg), 1);
+  return '<div class="barras">' + topicosLista.map(t => `
+    <div class="barra-t"><span class="nome">${esc(t.titulo)}</span><span class="t">${fmtDur(t.seg * 1000)}</span>
+    <span class="trilho"><i style="width:${Math.max(2, Math.round(t.seg / max * 100))}%"></i></span></div>`).join('') + '</div>';
+}
+function topicosDaSessao(){
+  if (!sessao) return [];
+  return Object.keys(sessao.tempos).map(Number).sort((a, b) => a - b)
+    .map(i => ({ titulo: sessao.nomes[i] || (i < 0 ? 'Abertura' : 'Tópico ' + (i + 1)), seg: Math.round(sessao.tempos[i] / 1000) }))
+    .filter(t => t.seg >= 1);
+}
+async function encerrar(){
+  // pausa para o tempo não continuar correndo enquanto decide
+  if (cron.inicio){ contarTopico(); cron.acumulado += Date.now() - cron.inicio; cron.inicio = null; gravarLS('pregador.cron', cron); tick(); }
+  gravarLS('pregador.sessao', sessao);
+  const total = decorrido();
+  if (!sessao || total < 60000){
+    if (confirm('Zerar o cronômetro?')) zerarCron();
+    return;
+  }
+  const tops = topicosDaSessao();
+  const hist = (await dbTodos('pregacoes')).filter(h => !h.excluido);
+  const locais = [...new Set(hist.map(h => h.local).filter(Boolean))];
+  const ultimoLocal = lerLS('pregador.local', '');
+  abrirModal(`
+    <h2>Encerrar pregação</h2>
+    <div class="sub">${esc(sessao.titulo)}</div>
+    <div class="total">${fmtTempo(total)}</div>
+    ${tops.length ? '<label class="rot">Tempo por tópico</label>' + htmlBarras(tops, total) : ''}
+    <div class="campos">
+      <div><label class="rot">Data</label><input id="h-data" type="date" value="${hojeISO()}"></div>
+      <div><label class="rot">Culto</label><input id="h-culto" list="cultos" value="${esc(sessao.culto)}"></div>
+      <div class="largo"><label class="rot">Local / congregação</label><input id="h-local" list="h-locais" value="${esc(ultimoLocal)}" placeholder="Ex.: Igreja Vidas — sede">
+        <datalist id="h-locais">${locais.map(l => `<option value="${esc(l)}">`).join('')}</datalist></div>
+      <div class="largo"><label class="rot">Observação (opcional)</label><input id="h-obs" placeholder="Ex.: apelo com 3 decisões"></div>
+    </div>
+    <div class="acoes">
+      <button class="btn" id="h-continuar">Continuar pregando</button>
+      <button class="btn perigo" id="h-descartar">Zerar sem salvar</button>
+      <button class="btn prim" id="h-salvar">Salvar no histórico</button>
+    </div>`);
+  $('#h-continuar').onclick = () => { fecharModal(); alternarCron(); };
+  $('#h-descartar').onclick = () => { if (confirm('Zerar sem guardar esta pregação no histórico?')){ fecharModal(); zerarCron(); } };
+  $('#h-salvar').onclick = async () => {
+    const local = $('#h-local').value.trim();
+    gravarLS('pregador.local', local);
+    const reg = { id: uid(), sermao_id: sessao.sermaoId, titulo: sessao.titulo, data: $('#h-data').value || hojeISO(), culto: $('#h-culto').value.trim(), local,
+      duracao_seg: Math.round(total / 1000), topicos: tops, obs: $('#h-obs').value.trim(), excluido: false, criado_em: agora(), atualizado_em: agora(), _pendente: true };
+    await dbGravar('pregacoes', reg);
+    fecharModal(); zerarCron('Pregação salva no histórico'); sincronizar();
+  };
+}
+
+async function abrirHistorico(sermaoId){
+  let lista = (await dbTodos('pregacoes')).filter(h => !h.excluido && (!sermaoId || h.sermao_id === sermaoId));
+  lista.sort((a, b) => (b.data || '').localeCompare(a.data || '') || (b.criado_em || '').localeCompare(a.criado_em || ''));
+  const titulo = sermaoId ? (lista[0] ? lista[0].titulo : 'Sermão') : 'Histórico de pregações';
+  const media = lista.length ? lista.reduce((s, h) => s + h.duracao_seg, 0) / lista.length : 0;
+  abrirModal(`
+    <h2>${sermaoId ? 'Histórico do sermão' : 'Histórico de pregações'}<button class="icone" id="h-fechar" title="Fechar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></h2>
+    <div class="sub">${sermaoId ? esc(titulo) + ' · ' : ''}${lista.length} pregação(ões)${lista.length ? ' · duração média ' + fmtDur(media * 1000) : ''}</div>
+    ${lista.length ? lista.map(h => `
+      <div class="hist-item" data-id="${h.id}">
+        <div class="hist-cab"><div>
+          ${sermaoId ? '' : `<div class="hist-tit">${esc(h.titulo)}</div>`}
+          <div class="hist-meta">${fmtData(h.data)}${h.culto ? ' · ' + esc(h.culto) : ''}${h.local ? ' · ' + esc(h.local) : ''}</div>
+        </div><b>${fmtDur(h.duracao_seg * 1000)}</b></div>
+        <div class="hist-det">
+          ${(h.topicos || []).length ? htmlBarras(h.topicos, h.duracao_seg) : ''}
+          ${h.obs ? `<p class="dica" style="margin-bottom:10px">${esc(h.obs)}</p>` : ''}
+          <button class="btn perigo" data-apagar="${h.id}">Apagar do histórico</button>
+        </div>
+      </div>`).join('') : '<p class="dica">Nenhuma pregação registrada ainda. Ao encerrar o cronômetro, o app pergunta se você quer salvar.</p>'}`);
+  $('#h-fechar').onclick = fecharModal;
+  $('#modal-caixa').onclick = async e => {
+    const ap = e.target.closest('[data-apagar]');
+    if (ap){
+      if (!confirm('Apagar este registro do histórico?')) return;
+      const h = await dbPegar('pregacoes', ap.dataset.apagar);
+      await dbGravar('pregacoes', { ...h, excluido: true, atualizado_em: agora(), _pendente: true });
+      sincronizar(); abrirHistorico(sermaoId); desenharLista(); return;
+    }
+    const cab_ = e.target.closest('.hist-cab'); if (cab_) cab_.parentElement.classList.toggle('aberto');
+  };
+}
+$('#btn-historico').addEventListener('click', () => abrirHistorico(null));
+
+/* ===================== CONTROLE DE APRESENTAÇÃO / TECLADO ===================== */
+function topicoAnterior(){
+  const i = topicos._atual ?? -1;
+  if (i < 0) return $('#leitura').scrollTo({ top: 0, behavior: 'smooth' });
+  const h = topicos[i], L = $('#leitura');
+  // se já passou bastante do início do tópico atual, volta para o início dele
+  if (h.getBoundingClientRect().top < L.getBoundingClientRect().top - 40) return irTopico(i);
+  if (i === 0) return L.scrollTo({ top: 0, behavior: 'smooth' });
+  irTopico(i - 1);
+}
+function topicoSeguinte(){
+  const i = topicos._atual ?? -1;
+  if (topicos[i + 1]) irTopico(i + 1); else aviso('Último tópico');
+}
+document.addEventListener('keydown', e => {
+  if (!$('#pulpito').classList.contains('ativa') || !$('#modal').classList.contains('oculto')) return;
+  if (e.target.closest && e.target.closest('input,textarea,select')) return;
+  const k = e.key;
+  if (['PageDown', 'ArrowRight', 'ArrowDown'].includes(k)){ e.preventDefault(); topicoSeguinte(); }
+  else if (['PageUp', 'ArrowLeft', 'ArrowUp'].includes(k)){ e.preventDefault(); topicoAnterior(); }
+  else if (['b', 'B', '.'].includes(k)){ e.preventDefault(); alternarCron(); }
+});
 
 /* ===================== MANTER A TELA ACESA ===================== */
 let trava = null;
