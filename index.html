@@ -271,6 +271,15 @@ mark.mk-vermelho{background:rgba(229,72,77,.40)} :root[data-theme="light"] mark.
 .hist-item.aberto .hist-det{display:block}
 .meta.pregado{color:var(--ouro)}
 @media (max-width:600px){ .campos{grid-template-columns:1fr} .total{font-size:36px} .modal{padding:18px} }
+/* notas de púlpito */
+#conteudo .nota{display:inline-block;cursor:pointer;font-size:.8em;line-height:1;margin:0 .15em;vertical-align:.1em;-webkit-user-select:none;user-select:none}
+#conteudo .nota::before{content:"📌"}
+.nota-linha{font-family:'Source Sans 3',system-ui,sans-serif;font-style:italic;font-weight:600;font-size:.7em;line-height:1.35;color:var(--t-laranja);margin:-.35em 0 .8em;padding:.3em .7em;border-left:3px solid var(--t-laranja);background:rgba(245,153,74,.08);border-radius:0 8px 8px 0;text-align:left}
+li > .nota-linha{margin:.3em 0}
+#balao{position:fixed;z-index:60;max-width:min(460px,86vw);background:var(--card);color:var(--txt);border:1.5px solid var(--t-laranja);border-radius:12px;box-shadow:var(--sombra);padding:12px 16px;font-size:20px;line-height:1.4;font-style:italic}
+.barra-marca[data-f="nota"] .cores, .barra-marca[data-f="nota"] #mk-selecao{display:none}
+.modal textarea{min-height:110px;resize:vertical;line-height:1.45;margin-bottom:14px}
+#ensinar-botao.ouvindo{background:var(--ouro);color:#0F1B33}
 </style>
 </head>
 <body>
@@ -388,6 +397,7 @@ mark.mk-vermelho{background:rgba(229,72,77,.40)} :root[data-theme="light"] mark.
       <button data-f="realce" title="Marca-texto"><mark class="amostra">ab</mark> Realce</button>
       <button data-f="letra" title="Cor da letra"><b class="amostra-a">A</b> Cor da letra</button>
       <button data-f="sub" title="Sublinhado"><u class="amostra-u">S</u> Sublinhar</button>
+      <button data-f="nota" title="Nota de púlpito">📌 Nota</button>
     </div>
     <div class="cores">
       <button class="cor" data-cor="amarelo" title="Amarelo"></button>
@@ -423,24 +433,29 @@ mark.mk-vermelho{background:rgba(229,72,77,.40)} :root[data-theme="light"] mark.
     <div class="seg" id="seg-fonte"><button data-v="sans">Sem serifa</button><button data-v="serif">Com serifa</button></div></div>
   <div class="opc"><label class="rot">Espaço entre linhas</label>
     <div class="seg" id="seg-lh"><button data-v="1.35">Justo</button><button data-v="1.5">Normal</button><button data-v="1.7">Amplo</button></div></div>
+  <div class="opc"><label class="rot">Notas de púlpito</label>
+    <div class="seg" id="seg-notas"><button data-v="visivel">Sempre visíveis</button><button data-v="icone">Só o ícone 📌</button></div></div>
   <div class="opc"><label class="rot">Alinhamento</label>
     <div class="seg" id="seg-al"><button data-v="left">À esquerda</button><button data-v="justify">Justificado</button></div></div>
   <div class="opc"><label class="rot">Cronômetro</label>
     <button class="btn" id="cron-zerar" style="width:100%;justify-content:center">Encerrar pregação / zerar</button>
     <p class="dica">Azul até 30 min · amarelo de 30 a 40 · laranja de 40 a 50 · vermelho a partir de 50. Segurar o cronômetro por 1 segundo também encerra.</p></div>
-  <div class="opc"><label class="rot">Controle de apresentação</label><p class="dica">Avançar (→ / Page Down): próximo tópico · Voltar (← / Page Up): tópico anterior · Botão de tela preta (B ou .): inicia/pausa o cronômetro.</p></div>
+  <div class="opc"><label class="rot">Controle de apresentação</label><p class="dica">Avançar: próximo tópico · Voltar: tópico anterior · Botão do quadrado (tela preta): inicia/pausa o cronômetro.</p>
+    <button class="btn" id="ensinar-botao" style="width:100%;justify-content:center;margin-top:10px">Ensinar o botão do cronômetro</button>
+    <p class="dica" id="tecla-info"></p></div>
   <div class="opc"><label class="rot">Tela</label><p class="dica" id="tela-status">—</p></div>
   <p class="versao" data-versao></p>
 </aside>
 
 <div id="modal" class="modal-fundo oculto"><div class="modal" id="modal-caixa"></div></div>
+<div id="balao" class="oculto"></div>
 <div id="aviso"></div>
 
 <script>
 /* ============================================================
    PREGADOR — púlpito digital do Bispo
    ============================================================ */
-const VERSAO = '1.5.0';
+const VERSAO = '1.6.0';
 
 // Banco de dados (projeto quiz-biblico, schema "pregador") — já configurado
 const SB_URL = 'https://ghjbljypxksubmcsvaig.supabase.co';
@@ -769,7 +784,7 @@ $('#btn-novo').addEventListener('click', () => abrirEditor(null));
 let pAtual = null, topicos = [], textoAtivo = 0;
 
 const celular = Math.min(innerWidth, innerHeight) < 600;
-const cfgPadrao = { fs: celular ? 20 : 28, gfs: celular ? 19 : 24, fonte: 'sans', lh: '1.5', al: 'left' };
+const cfgPadrao = { fs: celular ? 20 : 28, gfs: celular ? 19 : 24, fonte: 'sans', lh: '1.5', al: 'left', notas: 'visivel' };
 let cfg = { ...cfgPadrao, ...lerLS('pregador.cfg', {}) };
 function aplicarCfg(){
   const c = $('#conteudo');
@@ -780,11 +795,13 @@ function aplicarCfg(){
   $$('#seg-fonte button').forEach(b => b.classList.toggle('on', b.dataset.v === cfg.fonte));
   $$('#seg-lh button').forEach(b => b.classList.toggle('on', b.dataset.v === cfg.lh));
   $$('#seg-al button').forEach(b => b.classList.toggle('on', b.dataset.v === cfg.al));
+  $$('#seg-notas button').forEach(b => b.classList.toggle('on', b.dataset.v === cfg.notas));
   gravarLS('pregador.cfg', cfg);
+  if (typeof renderNotas === 'function') renderNotas();
 }
 $$('[data-fs]').forEach(b => b.addEventListener('click', () => { cfg.fs = Math.min(56, Math.max(16, cfg.fs + +b.dataset.fs)); aplicarCfg(); atualizarTopico(); }));
 $$('[data-gfs]').forEach(b => b.addEventListener('click', () => { cfg.gfs = Math.min(44, Math.max(16, cfg.gfs + +b.dataset.gfs)); aplicarCfg(); }));
-[['#seg-fonte', 'fonte'], ['#seg-lh', 'lh'], ['#seg-al', 'al']].forEach(([sel, k]) =>
+[['#seg-fonte', 'fonte'], ['#seg-lh', 'lh'], ['#seg-al', 'al'], ['#seg-notas', 'notas']].forEach(([sel, k]) =>
   $$(sel + ' button').forEach(b => b.addEventListener('click', () => { cfg[k] = b.dataset.v; aplicarCfg(); })));
 
 function abrirPainel(on){ $('#painel').classList.toggle('aberto', on); $('#fundo').classList.toggle('on', on); }
@@ -798,7 +815,7 @@ async function abrirPulpito(id){
   $('#p-titulo').textContent = pAtual.titulo;
   $('#conteudo').innerHTML = pAtual.conteudo_html || '<p>(sermão vazio)</p>';
   ligarReferencias();
-  aplicarCfg();
+  aplicarCfg();   // também desenha as notas
   // tópicos: usa os títulos de nível 2; se não houver, nível 1; senão nível 3
   const c = $('#conteudo');
   topicos = [...c.querySelectorAll('h2')];
@@ -919,7 +936,7 @@ const FERRAMENTAS = {
 };
 let corMarca = lerLS('pregador.cor', 'amarelo');
 let ferramenta = lerLS('pregador.ferr', 'realce');
-if (!FERRAMENTAS[ferramenta]) ferramenta = 'realce';
+if (!FERRAMENTAS[ferramenta] && ferramenta !== 'nota') ferramenta = 'realce';
 function modoMarcar(on){
   $('#pulpito').classList.toggle('marcando', on);
   $('#p-marcar').classList.toggle('on', on);
@@ -995,11 +1012,13 @@ function fraseNoPonto(x, y){
     if (okIni && fim <= acc + L){ range.setEnd(n, fim - acc); break; }
     acc += L;
   }
+  range._bloco = bloco; range._ini = ini; range._fim = fim;
   return range;
 }
 function salvarRealces(){
   const copia = $('#conteudo').cloneNode(true);
   const desembrulhar = x => { const pai = x.parentNode; while (x.firstChild) pai.insertBefore(x.firstChild, x); x.remove(); };
+  copia.querySelectorAll('.gerado').forEach(x => x.remove());
   copia.querySelectorAll('.ref-link').forEach(desembrulhar);
   ['mark', 'span.fc', 'span.sb'].forEach(sel => copia.querySelectorAll(sel).forEach(x => { if (x.parentElement && x.parentElement.closest(sel)) desembrulhar(x); }));
   copia.normalize();
@@ -1010,6 +1029,8 @@ $('#conteudo').addEventListener('click', e => {
   if (!$('#pulpito').classList.contains('marcando')) return;
   const sel = getSelection();
   if (sel && !sel.isCollapsed) return;                     // está selecionando à mão
+  if (ferramenta === 'nota') return tocarNota(e);
+  if (e.target.closest('.gerado, span.nota')) return;
   const ja = e.target.closest(FERRAMENTAS[ferramenta].seletor);
   if (ja && $('#conteudo').contains(ja)){ apagarDestaque(ja); salvarRealces(); return; }
   const r = fraseNoPonto(e.clientX, e.clientY);
@@ -1027,6 +1048,98 @@ $('#mk-selecao').addEventListener('click', () => {
   if (!sel || sel.isCollapsed || !$('#conteudo').contains(sel.anchorNode)) return aviso('Primeiro selecione um trecho do sermão.');
   if (destacar(sel.getRangeAt(0))){ sel.removeAllRanges(); salvarRealces(); }
 });
+
+/* ===================== NOTAS DE PÚLPITO ===================== */
+function renderNotas(){
+  const c = $('#conteudo');
+  c.querySelectorAll('.gerado').forEach(x => x.remove());
+  fecharBalao();
+  if (cfg.notas !== 'visivel') return;
+  const porBloco = new Map();
+  c.querySelectorAll('span.nota').forEach(n => {
+    const b = n.closest(BLOCOS) || n.parentElement;
+    if (!porBloco.has(b)) porBloco.set(b, []);
+    porBloco.get(b).push(n.dataset.nota || '');
+  });
+  porBloco.forEach((textos, b) => {
+    textos.filter(Boolean).reverse().forEach(t => {
+      const d = document.createElement('div');
+      d.className = 'nota-linha gerado'; d.textContent = '📌 ' + t;
+      if (b.matches('li,td,th')) b.appendChild(d); else b.insertAdjacentElement('afterend', d);
+    });
+  });
+}
+function fecharBalao(){ $('#balao').classList.add('oculto'); }
+function abrirBalao(n){
+  const bl = $('#balao'), r = n.getBoundingClientRect();
+  bl.textContent = n.dataset.nota || '';
+  bl.classList.remove('oculto');
+  const w = bl.offsetWidth, h = bl.offsetHeight;
+  let x = Math.min(Math.max(12, r.left - w / 2), innerWidth - w - 12);
+  let y = r.bottom + 8; if (y + h > innerHeight - 12) y = r.top - h - 8;
+  bl.style.left = x + 'px'; bl.style.top = y + 'px';
+}
+// fora do modo marcar: toque no 📌 abre/fecha o balão
+$('#conteudo').addEventListener('click', e => {
+  if ($('#pulpito').classList.contains('marcando')) return;
+  const n = e.target.closest('span.nota');
+  if (!n) return;
+  e.stopPropagation();
+  if (!$('#balao').classList.contains('oculto') && $('#balao')._de === n) return fecharBalao();
+  $('#balao')._de = n; abrirBalao(n);
+});
+document.addEventListener('click', e => { if (!e.target.closest('#balao') && !e.target.closest('span.nota')) fecharBalao(); });
+$('#leitura').addEventListener('scroll', fecharBalao, { passive: true });
+
+function editarNota(textoAtual, aoSalvar, aoApagar){
+  abrirModal(`
+    <h2>${aoApagar ? 'Editar nota' : 'Nova nota de púlpito'}</h2>
+    <div class="sub">Só você vê. Ex.: “contar a ilustração do pescador”, “chamar o louvor”.</div>
+    <textarea id="nota-txt" placeholder="Escreva o lembrete…">${esc(textoAtual || '')}</textarea>
+    <div class="acoes">
+      <button class="btn" id="nota-cancelar">Cancelar</button>
+      ${aoApagar ? '<button class="btn perigo" id="nota-apagar">Apagar nota</button>' : ''}
+      <button class="btn prim" id="nota-salvar">Salvar nota</button>
+    </div>`);
+  const t = $('#nota-txt'); setTimeout(() => { t.focus(); t.setSelectionRange(t.value.length, t.value.length); }, 50);
+  $('#nota-cancelar').onclick = fecharModal;
+  $('#nota-salvar').onclick = () => { const v = t.value.trim(); if (!v) return aviso('Escreva o lembrete ou cancele.'); fecharModal(); aoSalvar(v); };
+  if (aoApagar) $('#nota-apagar').onclick = () => { fecharModal(); aoApagar(); };
+}
+function tocarNota(e){
+  // tocou num 📌 ou na linha da nota: editar
+  let n = e.target.closest('span.nota');
+  if (!n){
+    const linha = e.target.closest('.nota-linha');
+    if (linha){
+      const b = linha.matches('li > .nota-linha') ? linha.parentElement : linha.previousElementSibling;
+      n = b && b.querySelector('span.nota');
+    }
+  }
+  // tocou numa frase que já tem 📌: editar essa
+  const r = n ? null : fraseNoPonto(e.clientX, e.clientY);
+  if (!n && r){
+    // posição (em letras) de cada 📌 dentro do parágrafo, comparada com o início/fim da frase
+    const textos = nosDeTexto(r._bloco);
+    n = [...r._bloco.querySelectorAll('span.nota')].find(x => {
+      const off = textos.filter(t => t.compareDocumentPosition(x) & Node.DOCUMENT_POSITION_FOLLOWING).reduce((s, t) => s + t.nodeValue.length, 0);
+      return off >= r._ini && off <= r._fim + 2;
+    });
+  }
+  if (n){
+    const alvo = n;
+    return editarNota(alvo.dataset.nota,
+      v => { alvo.dataset.nota = v; renderNotas(); salvarRealces(); },
+      () => { alvo.remove(); renderNotas(); salvarRealces(); aviso('Nota apagada'); });
+  }
+  if (!r) return;
+  editarNota('', v => {
+    const marca = document.createElement('span');
+    marca.className = 'nota'; marca.dataset.nota = v;
+    const fim = r.cloneRange(); fim.collapse(false); fim.insertNode(marca);
+    renderNotas(); salvarRealces(); aviso('Nota salva');
+  });
+}
 
 /* ===================== HORA E CRONÔMETRO ===================== */
 const ICONE_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
@@ -1199,13 +1312,39 @@ function topicoSeguinte(){
   const i = topicos._atual ?? -1;
   if (topicos[i + 1]) irTopico(i + 1); else aviso('Último tópico');
 }
+// teclas que os controles costumam mandar no botão de "tela preta" / quadrado
+const TECLAS_CRON = ['b', 'B', '.', 'w', 'W', ',', 'Escape', 'F5', 'Tab', 'Enter', 'MediaPlayPause', 'AudioVolumeMute'];
+let teclaAprendida = lerLS('pregador.tecla', null);   // { key, code }
+let ouvindoTecla = false, ultimoCron = 0;
+const MODIFICADORAS = ['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'Fn'];
+function infoTecla(ult){
+  $('#tecla-info').textContent = (teclaAprendida ? `Botão do cronômetro aprendido: “${teclaAprendida.key}”. ` : '') + (ult ? `Última tecla recebida: “${ult}”.` : '');
+}
+infoTecla();
+$('#ensinar-botao').addEventListener('click', () => {
+  ouvindoTecla = true; $('#ensinar-botao').classList.add('ouvindo');
+  $('#ensinar-botao').textContent = 'Aperte agora o botão do quadrado…';
+});
 document.addEventListener('keydown', e => {
+  if (MODIFICADORAS.includes(e.key)) return;
+  if (ouvindoTecla){
+    e.preventDefault(); ouvindoTecla = false;
+    teclaAprendida = { key: e.key, code: e.code }; gravarLS('pregador.tecla', teclaAprendida);
+    $('#ensinar-botao').classList.remove('ouvindo'); $('#ensinar-botao').textContent = 'Ensinar o botão do cronômetro';
+    infoTecla(); aviso('Pronto! Esse botão agora inicia/pausa o cronômetro.');
+    return;
+  }
   if (!$('#pulpito').classList.contains('ativa') || !$('#modal').classList.contains('oculto')) return;
   if (e.target.closest && e.target.closest('input,textarea,select')) return;
+  infoTecla(e.key);
   const k = e.key;
-  if (['PageDown', 'ArrowRight', 'ArrowDown'].includes(k)){ e.preventDefault(); topicoSeguinte(); }
+  const ehCron = teclaAprendida ? (k === teclaAprendida.key || e.code === teclaAprendida.code) : TECLAS_CRON.includes(k);
+  if (ehCron){
+    e.preventDefault();
+    if (Date.now() - ultimoCron > 600){ ultimoCron = Date.now(); alternarCron(); }   // evita duplo disparo
+  }
+  else if (['PageDown', 'ArrowRight', 'ArrowDown'].includes(k)){ e.preventDefault(); topicoSeguinte(); }
   else if (['PageUp', 'ArrowLeft', 'ArrowUp'].includes(k)){ e.preventDefault(); topicoAnterior(); }
-  else if (['b', 'B', '.'].includes(k)){ e.preventDefault(); alternarCron(); }
 });
 
 /* ===================== MANTER A TELA ACESA ===================== */

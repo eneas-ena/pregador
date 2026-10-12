@@ -1,5 +1,5 @@
 // Pregador — service worker (funciona sem internet)
-const VERSAO = '1.5.0';
+const VERSAO = '1.6.0';
 const CACHE = 'pregador-' + VERSAO;
 const ARQUIVOS = [
   './', './index.html', './manifest.json', './mammoth.min.js',
