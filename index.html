@@ -150,6 +150,11 @@ label.rot{display:block;font-size:13px;color:var(--txt2);margin-bottom:6px;font-
 .g-texto{font-size:19px;line-height:1.5;color:var(--txt);cursor:pointer;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;margin-top:2px}
 #gaveta.aberta .g-texto{white-space:pre-wrap;overflow-y:auto;max-height:48vh;font-size:var(--gfs,24px);padding:4px 0 6px;-webkit-overflow-scrolling:touch}
 #gaveta.vazia{display:none}
+/* fechada: só as referências */
+#gaveta:not(.aberta) .g-cab,#gaveta:not(.aberta) .g-texto{display:none}
+#gaveta:not(.aberta) .g-chips{padding-bottom:0}
+#gaveta:not(.aberta) .pegador{margin-bottom:6px}
+#gaveta:not(.aberta) .chip{font-size:16px;padding:7px 16px}
 
 /* configurações */
 .painel{position:fixed;top:0;right:0;bottom:0;width:min(400px,92vw);background:var(--card);border-left:1px solid var(--linha);box-shadow:var(--sombra);z-index:50;padding:calc(20px + env(safe-area-inset-top)) 22px 22px;overflow:auto;transform:translateX(105%);transition:transform .25s}
@@ -317,7 +322,7 @@ label.rot{display:block;font-size:13px;color:var(--txt2);margin-bottom:6px;font-
 /* ============================================================
    PREGADOR — púlpito digital do Bispo
    ============================================================ */
-const VERSAO = '1.0.0';
+const VERSAO = '1.1.0';
 
 // Banco de dados (projeto quiz-biblico, schema "pregador") — já configurado
 const SB_URL = 'https://ghjbljypxksubmcsvaig.supabase.co';
@@ -749,7 +754,6 @@ function desenharGaveta(abrir){
   g.classList.toggle('vazia', !textos.length);
   if (!textos.length) return ajustarFolga();
   if (textoAtivo >= textos.length) textoAtivo = 0;
-  $('#g-chips').classList.toggle('oculto', textos.length < 2);
   $('#g-chips').innerHTML = textos.map((t, i) => `<button class="chip ${i === textoAtivo ? 'ativo' : ''}" data-i="${i}">${esc(t.ref)}${i === (pAtual.base_idx || 0) ? ' ★' : ''}</button>`).join('');
   const t = textos[textoAtivo];
   $('#g-rot').textContent = textoAtivo === (pAtual.base_idx || 0) ? 'VERSÍCULO BASE' : 'TEXTO DE APOIO';
