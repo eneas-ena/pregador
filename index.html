@@ -16,6 +16,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
 <script src="mammoth.min.js"></script>
+<script src="supabase.min.js"></script>
 <style>
 /* ===================== CORES ===================== */
 :root{
@@ -280,6 +281,35 @@ li > .nota-linha{margin:.3em 0}
 .barra-marca[data-f="nota"] .cores, .barra-marca[data-f="nota"] #mk-selecao{display:none}
 .modal textarea{min-height:110px;resize:vertical;line-height:1.45;margin-bottom:14px}
 #ensinar-botao.ouvindo{background:var(--ouro);color:#0F1B33}
+/* slides */
+.ed-sl-grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-top:10px}
+.ed-sl-grade figure{position:relative;border-radius:8px;overflow:hidden;border:1px solid var(--linha);background:#000}
+.ed-sl-grade img{display:block;width:100%;aspect-ratio:16/9;object-fit:contain}
+.ed-sl-grade figcaption,.sl-mini span{position:absolute;left:5px;bottom:4px;font-size:11px;font-weight:700;background:rgba(0,0,0,.65);color:#fff;border-radius:5px;padding:1px 6px}
+.p-direita{display:flex;flex-direction:column;align-items:flex-end;gap:6px;max-width:46%;min-width:0}
+.p-direita .prox{max-width:100%}
+.sl-pill{display:flex;align-items:center;gap:7px;border:1px solid var(--linha);border-radius:10px;background:var(--card);padding:6px 10px;font-size:14px;font-weight:600;text-transform:none;letter-spacing:0;color:var(--txt)}
+.sl-pill svg{width:16px;height:16px}
+.sl-pill .seta{width:14px;height:14px;transition:transform .2s}
+.sl-pill.aberto .seta{transform:rotate(180deg)}
+.sl-pill.aberto{border-color:var(--ouro)}
+.pt{width:9px;height:9px;border-radius:50%;background:#888;display:inline-block}
+.pt.ok{background:#3CB371}.pt.meio{background:var(--t-amarelo)}
+.sl-painel{position:fixed;z-index:31;width:min(400px,calc(100vw - 24px));max-height:62vh;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--linha);border-radius:14px;box-shadow:var(--sombra)}
+.sl-cab{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;border-bottom:1px solid var(--linha);flex-wrap:wrap}
+.sl-status{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--txt2);font-weight:600}
+.sl-status i{width:9px;height:9px;border-radius:50%;background:#888}
+.sl-status.ok i{background:#3CB371}.sl-status.meio i{background:var(--t-amarelo)}
+.sl-botoes{display:flex;gap:6px}
+.sl-botoes .icone{width:38px;height:38px}
+#sl-preta.on{background:#000;color:#fff;border-color:#fff}
+.sl-grade{overflow-y:auto;-webkit-overflow-scrolling:touch;padding:10px;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.sl-mini{position:relative;border-radius:8px;overflow:hidden;border:3px solid transparent;background:#000;padding:0}
+.sl-mini img{display:block;width:100%;aspect-ratio:16/9;object-fit:contain}
+.sl-mini.atual{border-color:var(--ouro)}
+.sl-mini.atual span{background:var(--ouro);color:#0F1B33}
+.sl-painel.preta .sl-mini.atual{border-color:#888}
+@media (max-width:600px){ .p-direita{max-width:66%} .sl-painel{left:12px;right:12px;width:auto} }
 </style>
 </head>
 <body>
@@ -341,6 +371,15 @@ li > .nota-linha{margin:.3em 0}
       </div>
 
       <div class="secao">
+        <h2>Slides para projeção (PDF) <span class="dica" style="margin:0;font-family:inherit">opcional</span></h2>
+        <div class="soltar" id="ed-sl-soltar"><strong>Toque aqui para escolher o PDF dos slides</strong><br><span class="dica">cada página vira um slide</span></div>
+        <input type="file" id="ed-sl-arq" accept="application/pdf,.pdf" class="oculto">
+        <div id="ed-sl-info" class="dica"></div>
+        <div id="ed-sl-grade" class="ed-sl-grade"></div>
+        <button class="btn perigo oculto" id="ed-sl-remover" style="margin-top:10px">Remover slides</button>
+      </div>
+
+      <div class="secao">
         <h2>Textos bíblicos (NAA)
           <button class="btn" id="ed-add-texto">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
@@ -387,10 +426,28 @@ li > .nota-linha{margin:.3em 0}
   </header>
   <div class="p-sub">
     <span><span id="p-topico">Início</span><span class="versao v-mob" data-versao></span></span>
-    <div class="prox" id="p-prox">
-      <button id="p-prox-ir"></button>
-      <button id="p-prox-menu" title="Todos os tópicos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+    <div class="p-direita">
+      <div class="prox" id="p-prox">
+        <button id="p-prox-ir"></button>
+        <button id="p-prox-menu" title="Todos os tópicos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+      </div>
+      <button class="sl-pill oculto" id="sl-pill" title="Slides da projeção">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+        <span id="sl-rot">Slides</span><i class="pt" id="sl-pt"></i>
+        <svg class="seta" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
     </div>
+  </div>
+  <div id="sl-painel" class="sl-painel oculto">
+    <div class="sl-cab">
+      <span class="sl-status" id="sl-status"><i></i><span>Conectando…</span></span>
+      <div class="sl-botoes">
+        <button class="icone" id="sl-ant" title="Slide anterior"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+        <button class="icone" id="sl-seg" title="Próximo slide"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></button>
+        <button class="btn" id="sl-preta">Tela preta</button>
+      </div>
+    </div>
+    <div class="sl-grade" id="sl-grade"></div>
   </div>
   <div class="barra-marca">
     <div class="seg" id="seg-ferr">
@@ -455,7 +512,7 @@ li > .nota-linha{margin:.3em 0}
 /* ============================================================
    PREGADOR — púlpito digital do Bispo
    ============================================================ */
-const VERSAO = '1.6.0';
+const VERSAO = '1.7.0';
 
 // Banco de dados (projeto quiz-biblico, schema "pregador") — já configurado
 const SB_URL = 'https://ghjbljypxksubmcsvaig.supabase.co';
@@ -495,12 +552,13 @@ let _db;
 function abrirDB(){
   if (_db) return Promise.resolve(_db);
   return new Promise((ok, erro) => {
-    const r = indexedDB.open('pregador', 2);
+    const r = indexedDB.open('pregador', 3);
     r.onupgradeneeded = () => {
       const d = r.result;
       if (!d.objectStoreNames.contains('sermoes')) d.createObjectStore('sermoes', { keyPath: 'id' });
       if (!d.objectStoreNames.contains('textos')) d.createObjectStore('textos', { keyPath: 'chave' });
       if (!d.objectStoreNames.contains('pregacoes')) d.createObjectStore('pregacoes', { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('slides')){ const st = d.createObjectStore('slides', { keyPath: 'chave' }); st.createIndex('sermao', 'sermao_id'); }
     };
     r.onsuccess = () => { _db = r.result; ok(_db); };
     r.onerror = () => erro(r.error);
@@ -508,6 +566,8 @@ function abrirDB(){
 }
 async function dbTodos(loja){ const d = await abrirDB(); return new Promise((ok, erro) => { const q = d.transaction(loja).objectStore(loja).getAll(); q.onsuccess = () => ok(q.result || []); q.onerror = () => erro(q.error); }); }
 async function dbPegar(loja, k){ const d = await abrirDB(); return new Promise((ok, erro) => { const q = d.transaction(loja).objectStore(loja).get(k); q.onsuccess = () => ok(q.result); q.onerror = () => erro(q.error); }); }
+async function dbSlidesDe(sermaoId){ const d = await abrirDB(); return new Promise((ok, erro) => { const q = d.transaction('slides').objectStore('slides').index('sermao').getAll(IDBKeyRange.only(sermaoId)); q.onsuccess = () => ok((q.result || []).sort((a, b) => a.n - b.n)); q.onerror = () => erro(q.error); }); }
+async function dbApagarSlides(sermaoId){ const d = await abrirDB(); return new Promise((ok, erro) => { const t = d.transaction('slides', 'readwrite'); const q = t.objectStore('slides').index('sermao').openCursor(IDBKeyRange.only(sermaoId)); q.onsuccess = () => { const c = q.result; if (c){ c.delete(); c.continue(); } }; t.oncomplete = ok; t.onerror = () => erro(t.error); }); }
 async function dbGravar(loja, objs){ const d = await abrirDB(); return new Promise((ok, erro) => { const t = d.transaction(loja, 'readwrite'); const s = t.objectStore(loja); [].concat(objs).forEach(o => s.put(o)); t.oncomplete = ok; t.onerror = () => erro(t.error); }); }
 
 /* ===================== SINCRONIZAÇÃO COM O SUPABASE ===================== */
@@ -553,12 +613,14 @@ async function sincronizar(){
       console.error(e); falhas++;
       const m = String(e.message);
       if (m.includes('PGRST106')) aviso('O schema "pregador" ainda não está liberado no Supabase (veja as instruções).', 6000);
+      else if (t.loja === 'sermoes' && m.includes('slides')) aviso('Falta rodar o schema-v1.7.sql no Supabase (slides). Os sermões com slides ficam só no aparelho até lá.', 7000);
       else if (t.loja === 'pregacoes' && (m.includes('PGRST205') || m.includes('42P01') || m.includes(' 404 ')) && !avisouTabela){ avisouTabela = true; aviso('Falta criar a tabela do histórico no Supabase (rode o schema-v1.5.sql). Por enquanto o histórico fica só no aparelho.', 7000); }
     }
   }
   statusSinc(falhas ? 'pend' : '', falhas ? 'Sem conexão com o banco' : 'Salvo na nuvem');
   sincronizando = false;
   if (mudou && $('#inicio').classList.contains('ativa')) desenharLista();
+  enviarSlides();
 }
 async function mostrarPendencias(){
   let p = false; for (const t of TABELAS) if ((await dbTodos(t.loja)).some(x => x._pendente)) p = true;
@@ -634,6 +696,7 @@ async function abrirEditor(id){
   $('#ed-culto').value = edAtual.culto || '';
   $('#ed-arquivo').value = '';
   mostrarPrevia(id ? 'Sermão já carregado. Escolha outro arquivo só se quiser substituí-lo.' : '');
+  edSlides = null; mostrarSlidesEditor();
   $('#ed-textos').innerHTML = '';
   (edAtual.textos.length ? edAtual.textos : [{ ref: '', texto: '' }]).forEach((t, i) => addLinhaTexto(t, i === (edAtual.base_idx || 0)));
   irPara('editor');
@@ -766,7 +829,20 @@ $('#ed-salvar').addEventListener('click', async () => {
     const ch = chaveRef(ref), salvo = bibliotecaTextos[ch];
     if (!salvo || salvo.texto !== texto) paraBiblioteca.push({ chave: ch, ref, texto, versao: 'NAA', atualizado_em: agora(), _pendente: true });
   }
+  if (lendoPdf) return aviso('Espere terminar a conversão dos slides.');
   const s = { ...edAtual, titulo, data_pregacao: $('#ed-data').value || null, culto: $('#ed-culto').value.trim(), conteudo_html: edHtml, textos, base_idx: base, atualizado_em: agora(), _pendente: true };
+  if (edSlides !== null){
+    // slides trocados ou removidos
+    const antigos = (edAtual.slides || []).map(x => x.path);
+    if (antigos.length) gravarLS('pregador.apagarSlides', [...lerLS('pregador.apagarSlides', []), ...antigos]);
+    await dbApagarSlides(s.id);
+    if (edSlides.length){
+      const v = Date.now();
+      const recs = edSlides.map((sl, i) => ({ chave: `${s.id}/${i + 1}`, sermao_id: s.id, n: i + 1, full: sl.full, thumb: sl.thumb, path: `${s.id}/${v}-${i + 1}.jpg`, enviado: false }));
+      await dbGravar('slides', recs);
+      s.slides = recs.map(r => ({ n: r.n, path: r.path })); s.slides_v = v;
+    } else { s.slides = []; s.slides_v = null; }
+  }
   await dbGravar('sermoes', s);
   if (paraBiblioteca.length) await dbGravar('textos', paraBiblioteca);
   aviso('Sermão salvo');
@@ -779,6 +855,89 @@ $('#ed-excluir').addEventListener('click', async () => {
 });
 $('#ed-voltar').addEventListener('click', () => { irPara('inicio'); desenharLista(); });
 $('#btn-novo').addEventListener('click', () => abrirEditor(null));
+
+/* ===================== SLIDES (editor) ===================== */
+let edSlides = null;      // null = sem mudança · [] = remover · [{full, thumb}] = novos
+let lendoPdf = false, urlsEditor = [];
+function soltarUrls(lista){ lista.forEach(u => { try { URL.revokeObjectURL(u); } catch {} }); lista.length = 0; }
+async function mostrarSlidesEditor(){
+  soltarUrls(urlsEditor);
+  const grade = $('#ed-sl-grade'), zona = $('#ed-sl-soltar');
+  let itens = [];
+  if (edSlides !== null) itens = edSlides.map((sl, i) => ({ n: i + 1, src: (urlsEditor[urlsEditor.length] = URL.createObjectURL(sl.thumb)) }));
+  else if ((edAtual.slides || []).length){
+    const locais = Object.fromEntries((await dbSlidesDe(edAtual.id)).map(r => [r.n, r]));
+    itens = edAtual.slides.map(x => ({ n: x.n, src: locais[x.n] ? (urlsEditor[urlsEditor.length] = URL.createObjectURL(locais[x.n].thumb)) : urlSlide(x.path) }));
+  }
+  grade.innerHTML = itens.map(it => `<figure><img src="${it.src}" alt=""><figcaption>${it.n}</figcaption></figure>`).join('');
+  $('#ed-sl-remover').classList.toggle('oculto', !itens.length);
+  zona.classList.toggle('cheio', !!itens.length);
+  zona.innerHTML = itens.length ? `<strong>✓ ${itens.length} slide(s)</strong><br><span class="dica">Toque para trocar o PDF</span>` : '<strong>Toque aqui para escolher o PDF dos slides</strong><br><span class="dica">cada página vira um slide</span>';
+  if (!lendoPdf && edSlides !== null && !edSlides.length) $('#ed-sl-info').textContent = (edAtual.slides || []).length ? 'Os slides serão removidos ao salvar.' : '';
+  if (edSlides === null && !lendoPdf) $('#ed-sl-info').textContent = '';
+}
+const paraBlob = (cv, q) => new Promise(ok => cv.toBlob(ok, 'image/jpeg', q));
+async function lerPdfSlides(arq){
+  if (!/\.pdf$/i.test(arq.name) && arq.type !== 'application/pdf') return aviso('Escolha um arquivo PDF.');
+  lendoPdf = true; const info = $('#ed-sl-info');
+  try {
+    info.textContent = 'Abrindo o PDF…';
+    const pdfjs = await import('./pdf.min.mjs');
+    pdfjs.GlobalWorkerOptions.workerSrc = './pdf.worker.min.mjs';
+    const doc = await pdfjs.getDocument({ data: await arq.arrayBuffer() }).promise;
+    const novos = [];
+    for (let i = 1; i <= doc.numPages; i++){
+      info.textContent = `Convertendo slide ${i} de ${doc.numPages}…`;
+      const pg = await doc.getPage(i);
+      const v1 = pg.getViewport({ scale: 1 });
+      const esc_ = Math.min(1920 / v1.width, 1440 / v1.height);
+      const vp = pg.getViewport({ scale: esc_ });
+      const cv = document.createElement('canvas'); cv.width = Math.round(vp.width); cv.height = Math.round(vp.height);
+      const cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height);
+      await pg.render({ canvasContext: cx, viewport: vp }).promise;
+      const full = await paraBlob(cv, 0.86);
+      const tw = 360, th = Math.round(cv.height * tw / cv.width);
+      const cm = document.createElement('canvas'); cm.width = tw; cm.height = th; cm.getContext('2d').drawImage(cv, 0, 0, tw, th);
+      const thumb = await paraBlob(cm, 0.72);
+      cv.width = cv.height = 0; cm.width = cm.height = 0; pg.cleanup();
+      novos.push({ full, thumb });
+    }
+    doc.destroy();
+    edSlides = novos;
+    info.textContent = `${novos.length} slide(s) prontos. Toque em Salvar para guardar.`;
+  } catch (e){ console.error(e); aviso('Não consegui ler este PDF.'); info.textContent = ''; }
+  finally { lendoPdf = false; mostrarSlidesEditor(); }
+}
+$('#ed-sl-soltar').addEventListener('click', () => { if (!lendoPdf) $('#ed-sl-arq').click(); });
+$('#ed-sl-arq').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) lerPdfSlides(f); });
+['dragover', 'dragenter'].forEach(ev => $('#ed-sl-soltar').addEventListener(ev, e => e.preventDefault()));
+$('#ed-sl-soltar').addEventListener('drop', e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f && !lendoPdf) lerPdfSlides(f); });
+$('#ed-sl-remover').addEventListener('click', () => { if (confirm('Remover os slides deste sermão?')){ edSlides = []; mostrarSlidesEditor(); } });
+
+/* ===================== SLIDES (envio para a nuvem) ===================== */
+const BUCKET = 'pregador-slides';
+let _sb = null, enviandoSlides = false;
+function sb(){ if (!_sb && window.supabase) _sb = window.supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: false, autoRefreshToken: false } }); return _sb; }
+const urlSlide = path => `${SB_URL}/storage/v1/object/public/${BUCKET}/${path}`;
+async function enviarSlides(){
+  if (enviandoSlides || !navigator.onLine || !sb()) return;
+  enviandoSlides = true;
+  try {
+    const d = await abrirDB();
+    const pend = await new Promise((ok, erro) => { const q = d.transaction('slides').objectStore('slides').getAll(); q.onsuccess = () => ok(q.result.filter(r => !r.enviado)); q.onerror = () => erro(q.error); });
+    let i = 0;
+    for (const r of pend){
+      i++; statusSinc('', `Enviando slides ${i}/${pend.length}…`);
+      const { error } = await sb().storage.from(BUCKET).upload(r.path, r.full, { upsert: true, contentType: 'image/jpeg', cacheControl: '31536000' });
+      if (error){ console.error(error); statusSinc('pend', 'Slides não enviados'); if (/bucket|not found|policy|row-level/i.test(error.message)) aviso('Falta rodar o schema-v1.7.sql no Supabase para enviar os slides.', 7000); return; }
+      await dbGravar('slides', { ...r, enviado: true });
+    }
+    const apagar = lerLS('pregador.apagarSlides', []);
+    if (apagar.length){ const { error } = await sb().storage.from(BUCKET).remove(apagar); if (!error) gravarLS('pregador.apagarSlides', []); }
+    if (pend.length){ statusSinc('', 'Salvo na nuvem'); if ($('#pulpito').classList.contains('ativa')) pintarSlides(); }
+  } catch (e){ console.error(e); }
+  finally { enviandoSlides = false; }
+}
 
 /* ===================== PÚLPITO ===================== */
 let pAtual = null, topicos = [], textoAtivo = 0;
@@ -831,8 +990,9 @@ async function abrirPulpito(id){
   $('#leitura').scrollTop = pos[id] || 0;
   atualizarTopico();
   segurarTela();
+  prepararSlides();
 }
-$('#p-voltar').addEventListener('click', () => { modoMarcar(false); $('#menu-topicos').classList.add('oculto'); irPara('inicio'); desenharLista(); });
+$('#p-voltar').addEventListener('click', () => { modoMarcar(false); abrirSlides(false); $('#menu-topicos').classList.add('oculto'); irPara('inicio'); desenharLista(); });
 
 // liga as referências citadas no sermão aos textos cadastrados
 function ligarReferencias(){
@@ -927,6 +1087,76 @@ $('#g-chips').addEventListener('click', e => {
 function ajustarFolga(){ /* deixa espaço no fim para o último parágrafo subir até o alto */ $('.fim-sermao').style.setProperty('--folga', Math.round($('#leitura').clientHeight * 0.6) + 'px'); }
 window.addEventListener('resize', () => { ajustarFolga(); atualizarTopico(); });
 
+
+/* ===================== SLIDES NO PÚLPITO + PROJETOR ===================== */
+let slidesP = [], urlsPulpito = [];
+let projEstado = { sermao_id: null, titulo: '', slides: [], atual: null, preta: false };
+let canal = null, canalOk = false, ultimoVivo = 0, batida = null, faltamEnviar = 0;
+async function prepararSlides(){
+  soltarUrls(urlsPulpito);
+  const lista = (pAtual.slides || []);
+  $('#sl-pill').classList.toggle('oculto', !lista.length);
+  if (!lista.length){ slidesP = []; abrirSlides(false); pararBatida(); return; }
+  const locais = Object.fromEntries((await dbSlidesDe(pAtual.id)).map(r => [r.n, r]));
+  faltamEnviar = Object.values(locais).filter(r => !r.enviado).length;
+  slidesP = lista.map(x => ({ n: x.n, url: urlSlide(x.path), mini: locais[x.n] ? (urlsPulpito[urlsPulpito.length] = URL.createObjectURL(locais[x.n].thumb)) : urlSlide(x.path) }));
+  // novo sermão = projetor começa em tela preta; mesmo sermão = mantém onde estava
+  if (projEstado.sermao_id !== pAtual.id) projEstado = { sermao_id: pAtual.id, titulo: pAtual.titulo, slides: slidesP.map(x => x.url), atual: null, preta: false };
+  else projEstado.slides = slidesP.map(x => x.url);
+  $('#sl-grade').innerHTML = slidesP.map(x => `<button class="sl-mini" data-n="${x.n}"><img src="${x.mini}" alt="" loading="lazy"><span>${x.n}</span></button>`).join('');
+  conectarProjetor(); iniciarBatida(); pintarSlides();
+  if (faltamEnviar) enviarSlides();
+}
+function pintarSlides(){
+  if (!slidesP.length) return;
+  $$('#sl-grade .sl-mini').forEach(b => b.classList.toggle('atual', +b.dataset.n === projEstado.atual));
+  $('#sl-painel').classList.toggle('preta', projEstado.preta);
+  $('#sl-preta').classList.toggle('on', projEstado.preta);
+  $('#sl-preta').textContent = projEstado.preta ? 'Voltar o slide' : 'Tela preta';
+  $('#sl-rot').textContent = projEstado.preta ? 'Tela preta' : projEstado.atual ? `Slide ${projEstado.atual}/${slidesP.length}` : `Slides (${slidesP.length})`;
+  const vivo = Date.now() - ultimoVivo < 12000;
+  const tipo = !canalOk ? '' : vivo ? 'ok' : 'meio';
+  const txt = !navigator.onLine ? 'Sem internet no iPad' : !canalOk ? 'Conectando…' : vivo ? 'Projetor conectado' : 'Projetor não está aberto';
+  $('#sl-status').className = 'sl-status ' + tipo;
+  $('#sl-status span').textContent = txt + (faltamEnviar ? ` · ${faltamEnviar} slide(s) sem enviar` : '');
+  $('#sl-pt').className = 'pt ' + tipo;
+}
+function abrirSlides(on){
+  const pn = $('#sl-painel'), pill = $('#sl-pill');
+  if (on === undefined) on = pn.classList.contains('oculto');
+  pn.classList.toggle('oculto', !on); pill.classList.toggle('aberto', on);
+  if (on){
+    const r = pill.getBoundingClientRect();
+    pn.style.top = (r.bottom + 6) + 'px';
+    if (innerWidth > 600) pn.style.right = Math.max(12, innerWidth - r.right) + 'px';
+    const atual = $('#sl-grade .sl-mini.atual'); if (atual) atual.scrollIntoView({ block: 'nearest' });
+  }
+}
+$('#sl-pill').addEventListener('click', e => { e.stopPropagation(); $('#menu-topicos').classList.add('oculto'); abrirSlides(); });
+function projetar(n){
+  projEstado.atual = n; projEstado.preta = false;
+  enviarEstado(); pintarSlides();
+}
+$('#sl-grade').addEventListener('click', e => { const b = e.target.closest('.sl-mini'); if (b) projetar(+b.dataset.n); });
+$('#sl-ant').addEventListener('click', () => { const n = projEstado.atual || 1; if (n > 1) projetar(n - 1); else projetar(1); });
+$('#sl-seg').addEventListener('click', () => { const n = projEstado.atual || 0; if (n < slidesP.length) projetar(n + 1); else aviso('Último slide'); });
+$('#sl-preta').addEventListener('click', () => { projEstado.preta = !projEstado.preta; enviarEstado(); pintarSlides(); });
+
+function conectarProjetor(){
+  if (canal || !sb()) return;
+  canal = sb().channel('pregador-projetor', { config: { broadcast: { self: false } } });
+  canal.on('broadcast', { event: 'vivo' }, () => { ultimoVivo = Date.now(); pintarSlides(); })
+       .on('broadcast', { event: 'pedido' }, () => { if ($('#pulpito').classList.contains('ativa') && slidesP.length) enviarEstado(); })
+       .subscribe(st => { canalOk = st === 'SUBSCRIBED'; pintarSlides(); if (canalOk && slidesP.length) enviarEstado(); });
+}
+function enviarEstado(){
+  if (!canal || !canalOk) return;
+  canal.send({ type: 'broadcast', event: 'estado', payload: projEstado }).catch(() => {});
+}
+function iniciarBatida(){ pararBatida(); batida = setInterval(() => { if ($('#pulpito').classList.contains('ativa') && slidesP.length){ enviarEstado(); pintarSlides(); } }, 4000); }
+function pararBatida(){ if (batida) clearInterval(batida); batida = null; }
+window.addEventListener('online', () => { if (slidesP.length) pintarSlides(); });
+window.addEventListener('offline', () => { if (slidesP.length) pintarSlides(); });
 
 /* ===================== MARCA-TEXTO (realce · cor da letra · sublinhado) ===================== */
 const FERRAMENTAS = {

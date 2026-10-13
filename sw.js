@@ -1,8 +1,9 @@
 // Pregador — service worker (funciona sem internet)
-const VERSAO = '1.6.0';
+const VERSAO = '1.7.0';
 const CACHE = 'pregador-' + VERSAO;
 const ARQUIVOS = [
   './', './index.html', './manifest.json', './mammoth.min.js',
+  './supabase.min.js', './pdf.min.mjs', './pdf.worker.min.mjs', './projetor.html',
   './icon-192.png', './icon-512.png', './apple-touch-icon.png'
 ];
 
@@ -35,10 +36,10 @@ self.addEventListener('fetch', e => {
   }
 
   // Página principal: tenta a internet primeiro (pega atualizações), senão usa o cache
-  if (req.mode === 'navigate' || url.pathname.endsWith('index.html')) {
+  if (req.mode === 'navigate' || url.pathname.endsWith('.html')) {
     e.respondWith(
-      fetch(req).then(resp => { const copia = resp.clone(); caches.open(CACHE).then(c => c.put('./index.html', copia)); return resp; })
-        .catch(() => caches.match('./index.html'))
+      fetch(req).then(resp => { const copia = resp.clone(); caches.open(CACHE).then(c => c.put(req, copia)); return resp; })
+        .catch(() => caches.match(req, { ignoreSearch: true }).then(r => r || caches.match('./index.html')))
     );
     return;
   }
