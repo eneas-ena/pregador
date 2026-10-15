@@ -310,6 +310,15 @@ li > .nota-linha{margin:.3em 0}
 .sl-mini.atual span{background:var(--ouro);color:#0F1B33}
 .sl-painel.preta .sl-mini.atual{border-color:#888}
 @media (max-width:600px){ .p-direita{max-width:66%} .sl-painel{left:12px;right:12px;width:auto} }
+/* correção de texto */
+.previa.editando{max-height:62vh;outline:2px solid var(--ouro);background:var(--card);cursor:text}
+.previa mark,.previa .fc,.previa .sb{border-radius:3px}
+.previa .nota::before{content:"📌"}
+#pulpito.editando-texto #conteudo{outline:2px dashed var(--ouro);outline-offset:14px;border-radius:6px;cursor:text;caret-color:var(--ouro)}
+#pulpito.editando-texto #conteudo .ref-link{border-bottom-style:none}
+.barra-marca[data-f="texto"] .cores, .barra-marca[data-f="texto"] #mk-selecao{display:none}
+.sec-cab{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+#ed-corrigir.on{background:var(--ouro);color:#0F1B33;border-color:var(--ouro)}
 </style>
 </head>
 <body>
@@ -360,7 +369,7 @@ li > .nota-linha{margin:.3em 0}
       </div>
 
       <div class="secao">
-        <h2>Sermão (Word)</h2>
+        <h2 class="sec-cab">Sermão (Word) <button class="btn oculto" id="ed-corrigir" type="button">✏️ Corrigir texto</button></h2>
         <div class="soltar" id="ed-soltar">
           <strong>Toque aqui para escolher o arquivo .docx</strong><br>
           <span class="dica">ou arraste o arquivo para cá</span>
@@ -455,6 +464,7 @@ li > .nota-linha{margin:.3em 0}
       <button data-f="letra" title="Cor da letra"><b class="amostra-a">A</b> Cor da letra</button>
       <button data-f="sub" title="Sublinhado"><u class="amostra-u">S</u> Sublinhar</button>
       <button data-f="nota" title="Nota de púlpito">📌 Nota</button>
+      <button data-f="texto" title="Corrigir o texto">✏️ Texto</button>
     </div>
     <div class="cores">
       <button class="cor" data-cor="amarelo" title="Amarelo"></button>
@@ -512,7 +522,7 @@ li > .nota-linha{margin:.3em 0}
 /* ============================================================
    PREGADOR — púlpito digital do Bispo
    ============================================================ */
-const VERSAO = '1.7.1';
+const VERSAO = '1.8.0';
 
 // Banco de dados (projeto quiz-biblico, schema "pregador") — já configurado
 const SB_URL = 'https://ghjbljypxksubmcsvaig.supabase.co';
@@ -713,6 +723,7 @@ function mostrarPrevia(info){
     zona.innerHTML = '<strong>✓ Sermão carregado</strong><br><span class="dica">Toque para trocar o arquivo</span>';
     $('#ed-info').innerHTML = (info ? esc(info) + '<br>' : '') + (tops ? `Encontrei <b>${tops}</b> tópico(s) pelos títulos do Word.` : 'Não encontrei títulos. O sermão vai aparecer como texto corrido, sem a navegação por tópicos.');
     prev.innerHTML = edHtml; prev.classList.remove('oculto');
+    sairCorrecaoEditor(false);
   } else {
     zona.classList.remove('cheio');
     zona.innerHTML = '<strong>Toque aqui para escolher o arquivo .docx</strong><br><span class="dica">ou arraste o arquivo para cá</span>';
@@ -808,7 +819,40 @@ function contarTopicos(html){
   const d = new DOMParser().parseFromString(html, 'text/html');
   return d.querySelectorAll('h2').length || d.querySelectorAll('h1').length || d.querySelectorAll('h3').length;
 }
-$('#ed-soltar').addEventListener('click', () => $('#ed-arquivo').click());
+$('#ed-soltar').addEventListener('click', () => {
+  // trocar o Word apaga o que foi marcado no app
+  const temMarcas = /<(mark|span class="(fc|sb|nota))/.test(edHtml);
+  if (temMarcas && !confirm('Trocar o arquivo do Word apaga os realces, sublinhados, cores e notas feitos no app.\n\nPara só corrigir um erro, use “Corrigir texto”.\n\nTrocar o arquivo mesmo assim?')) return;
+  $('#ed-arquivo').click();
+});
+/* corrigir o texto no editor, sem perder as marcações */
+let edEditado = false;
+function sairCorrecaoEditor(guardar){
+  const prev = $('#ed-previa');
+  if (guardar && edEditado){ edHtml = limparHtmlEditado(prev); }
+  prev.contentEditable = 'false'; prev.classList.remove('editando');
+  $('#ed-corrigir').classList.remove('on'); $('#ed-corrigir').textContent = '✏️ Corrigir texto';
+  $('#ed-corrigir').classList.toggle('oculto', !edHtml);
+}
+function limparHtmlEditado(raiz){
+  const c = raiz.cloneNode(true);
+  c.querySelectorAll('.gerado').forEach(x => x.remove());
+  c.querySelectorAll('[contenteditable]').forEach(x => x.removeAttribute('contenteditable'));
+  c.querySelectorAll('p,h1,h2,h3,li').forEach(x => { if (!x.textContent.trim() && !x.querySelector('img,.nota')) x.remove(); });
+  c.normalize();
+  return c.innerHTML;
+}
+$('#ed-corrigir').addEventListener('click', () => {
+  const prev = $('#ed-previa');
+  if (prev.isContentEditable){ sairCorrecaoEditor(true); aviso('Correção guardada. Toque em Salvar para gravar.'); return; }
+  edEditado = false;
+  prev.querySelectorAll('.nota').forEach(n => n.contentEditable = 'false');
+  prev.contentEditable = 'true'; prev.classList.add('editando');
+  try { document.execCommand('defaultParagraphSeparator', false, 'p'); } catch {}
+  $('#ed-corrigir').classList.add('on'); $('#ed-corrigir').textContent = '✓ Concluir correção';
+  prev.focus();
+});
+$('#ed-previa').addEventListener('input', () => { edEditado = true; });
 $('#ed-arquivo').addEventListener('change', e => { if (e.target.files[0]) lerWord(e.target.files[0]); });
 ['dragover', 'dragenter'].forEach(ev => $('#ed-soltar').addEventListener(ev, e => { e.preventDefault(); }));
 $('#ed-soltar').addEventListener('drop', e => { e.preventDefault(); if (e.dataTransfer.files[0]) lerWord(e.dataTransfer.files[0]); });
@@ -816,6 +860,7 @@ $('#ed-soltar').addEventListener('drop', e => { e.preventDefault(); if (e.dataTr
 $('#ed-salvar').addEventListener('click', async () => {
   const titulo = $('#ed-titulo').value.trim();
   if (!titulo) return aviso('Dê um título ao sermão.');
+  if ($('#ed-previa').isContentEditable) sairCorrecaoEditor(true);
   if (!edHtml) return aviso('Escolha o arquivo do sermão em Word.');
   const linhas = $$('#ed-textos .texto-linha');
   const textos = []; let base = 0; const paraBiblioteca = [];
@@ -1158,6 +1203,42 @@ function pararBatida(){ if (batida) clearInterval(batida); batida = null; }
 window.addEventListener('online', () => { if (slidesP.length) pintarSlides(); });
 window.addEventListener('offline', () => { if (slidesP.length) pintarSlides(); });
 
+/* ===================== CORRIGIR O TEXTO NO PÚLPITO ===================== */
+let corrigindo = false, _salvarTexto;
+function correcaoPulpito(on){
+  const c = $('#conteudo');
+  if (on === corrigindo) return;
+  corrigindo = on;
+  $('#pulpito').classList.toggle('editando-texto', on);
+  if (on){
+    c.querySelectorAll('.gerado, .nota').forEach(x => x.contentEditable = 'false');
+    c.contentEditable = 'true';
+    try { document.execCommand('defaultParagraphSeparator', false, 'p'); } catch {}
+  } else {
+    c.contentEditable = 'false';
+    clearTimeout(_salvarTexto);
+    if (c._editado){ c._editado = false; salvarRealces(); redesenharSermao(); aviso('Correção salva'); }
+  }
+}
+$('#conteudo').addEventListener('input', () => {
+  if (!corrigindo) return;
+  $('#conteudo')._editado = true;
+  clearTimeout(_salvarTexto);
+  _salvarTexto = setTimeout(() => { if (corrigindo) salvarRealces(); }, 2500);   // guarda enquanto você digita
+});
+// redesenha o sermão a partir do que foi salvo (refaz tópicos, referências e notas), sem sair do lugar
+function redesenharSermao(){
+  const L = $('#leitura'), topo = L.scrollTop;
+  $('#conteudo').innerHTML = pAtual.conteudo_html || '';
+  ligarReferencias(); renderNotas();
+  const c = $('#conteudo');
+  topicos = [...c.querySelectorAll('h2')];
+  if (!topicos.length) topicos = [...c.querySelectorAll('h1')];
+  if (!topicos.length) topicos = [...c.querySelectorAll('h3')];
+  $('#p-prox').classList.toggle('oculto', !topicos.length);
+  L.scrollTop = topo; atualizarTopico();
+}
+
 /* ===================== MARCA-TEXTO (realce · cor da letra · sublinhado) ===================== */
 const FERRAMENTAS = {
   realce: { tag: 'mark', classe: c => 'mk-' + c,      seletor: 'mark' },
@@ -1166,8 +1247,9 @@ const FERRAMENTAS = {
 };
 let corMarca = lerLS('pregador.cor', 'amarelo');
 let ferramenta = lerLS('pregador.ferr', 'realce');
-if (!FERRAMENTAS[ferramenta] && ferramenta !== 'nota') ferramenta = 'realce';
+if (!FERRAMENTAS[ferramenta] && ferramenta !== 'nota') ferramenta = 'realce';   // 'texto' nunca fica salvo como padrão
 function modoMarcar(on){
+  if (!on) correcaoPulpito(false);
   $('#pulpito').classList.toggle('marcando', on);
   $('#p-marcar').classList.toggle('on', on);
   if (!on){ const sel = getSelection(); if (sel) sel.removeAllRanges(); }
@@ -1176,12 +1258,16 @@ function modoMarcar(on){
 $('#p-marcar').addEventListener('click', () => modoMarcar(!$('#pulpito').classList.contains('marcando')));
 $('#mk-concluir').addEventListener('click', () => modoMarcar(false));
 function pintarBarra(){
+  correcaoPulpito(ferramenta === 'texto' && $('#pulpito').classList.contains('marcando'));
+  $('#seg-ferr').closest('.barra-marca').querySelector('.dica').textContent = ferramenta === 'texto'
+    ? 'Toque no texto e corrija como num editor · as marcações continuam' : 'Toque na frase: aplica · toque de novo: tira';
   $$('.cor').forEach(b => b.classList.toggle('on', b.dataset.cor === corMarca));
   $$('#seg-ferr button').forEach(b => b.classList.toggle('on', b.dataset.f === ferramenta));
   $('.barra-marca').dataset.f = ferramenta;
 }
 $$('.cor').forEach(b => b.addEventListener('click', () => { corMarca = b.dataset.cor; gravarLS('pregador.cor', corMarca); pintarBarra(); }));
-$$('#seg-ferr button').forEach(b => b.addEventListener('click', () => { ferramenta = b.dataset.f; gravarLS('pregador.ferr', ferramenta); pintarBarra(); }));
+$$('#seg-ferr button').forEach(b => b.addEventListener('click', () => { ferramenta = b.dataset.f; if (ferramenta !== 'texto') gravarLS('pregador.ferr', ferramenta); pintarBarra(); }));
+$('#p-marcar').addEventListener('click', () => pintarBarra());
 pintarBarra();
 
 const BLOCOS = 'p,li,blockquote,h1,h2,h3,h4,h5,h6,td,th';
@@ -1249,6 +1335,7 @@ function salvarRealces(){
   const copia = $('#conteudo').cloneNode(true);
   const desembrulhar = x => { const pai = x.parentNode; while (x.firstChild) pai.insertBefore(x.firstChild, x); x.remove(); };
   copia.querySelectorAll('.gerado').forEach(x => x.remove());
+  copia.querySelectorAll('[contenteditable]').forEach(x => x.removeAttribute('contenteditable'));
   copia.querySelectorAll('.ref-link').forEach(desembrulhar);
   ['mark', 'span.fc', 'span.sb'].forEach(sel => copia.querySelectorAll(sel).forEach(x => { if (x.parentElement && x.parentElement.closest(sel)) desembrulhar(x); }));
   copia.normalize();
@@ -1259,6 +1346,7 @@ $('#conteudo').addEventListener('click', e => {
   if (!$('#pulpito').classList.contains('marcando')) return;
   const sel = getSelection();
   if (sel && !sel.isCollapsed) return;                     // está selecionando à mão
+  if (ferramenta === 'texto') return;
   if (ferramenta === 'nota') return tocarNota(e);
   if (e.target.closest('.gerado, span.nota')) return;
   const ja = e.target.closest(FERRAMENTAS[ferramenta].seletor);
@@ -1565,7 +1653,7 @@ document.addEventListener('keydown', e => {
     return;
   }
   if (!$('#pulpito').classList.contains('ativa') || !$('#modal').classList.contains('oculto')) return;
-  if (e.target.closest && e.target.closest('input,textarea,select')) return;
+  if (e.target.closest && e.target.closest('input,textarea,select,[contenteditable="true"]')) return;
   infoTecla(e.key);
   const k = e.key;
   const ehCron = teclaAprendida ? (k === teclaAprendida.key || e.code === teclaAprendida.code) : TECLAS_CRON.includes(k);
