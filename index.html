@@ -538,7 +538,7 @@ li > .nota-linha{margin:.3em 0}
 /* ============================================================
    PREGADOR — púlpito digital do Bispo
    ============================================================ */
-const VERSAO = '1.9.0';
+const VERSAO = '1.9.1';
 
 // Banco de dados (projeto quiz-biblico, schema "pregador") — já configurado
 const SB_URL = 'https://ghjbljypxksubmcsvaig.supabase.co';
@@ -1278,7 +1278,7 @@ window.addEventListener('resize', () => { ajustarFolga(); atualizarTopico(); });
 
 /* ===================== SLIDES NO PÚLPITO + PROJETOR ===================== */
 let slidesP = [], urlsPulpito = [];
-let projEstado = { sermao_id: null, titulo: '', slides: [], atual: null, preta: false };
+let projEstado = { sermao_id: null, titulo: '', slides: [], atual: null, preta: false, t: 0 };
 let canal = null, canalOk = false, ultimoVivo = 0, batida = null, faltamEnviar = 0;
 async function prepararSlides(){
   soltarUrls(urlsPulpito);
@@ -1289,7 +1289,7 @@ async function prepararSlides(){
   faltamEnviar = Object.values(locais).filter(r => !r.enviado).length;
   slidesP = lista.map(x => ({ n: x.n, url: urlSlide(x.path), mini: locais[x.n] ? (urlsPulpito[urlsPulpito.length] = URL.createObjectURL(locais[x.n].thumb)) : urlSlide(x.path) }));
   // novo sermão = projetor começa em tela preta; mesmo sermão = mantém onde estava
-  if (projEstado.sermao_id !== pAtual.id) projEstado = { sermao_id: pAtual.id, titulo: pAtual.titulo, slides: slidesP.map(x => x.url), atual: null, preta: false };
+  if (projEstado.sermao_id !== pAtual.id) projEstado = { sermao_id: pAtual.id, titulo: pAtual.titulo, slides: slidesP.map(x => x.url), atual: null, preta: false, t: 0 };   // t: 0 = ainda não tocou em nada (não muda o projetor)
   else projEstado.slides = slidesP.map(x => x.url);
   $('#sl-grade').innerHTML = slidesP.map(x => `<button class="sl-mini" data-n="${x.n}"><img src="${x.mini}" alt="" loading="lazy"><span>${x.n}</span></button>`).join('');
   conectarProjetor(); iniciarBatida(); pintarSlides();
@@ -1322,18 +1322,23 @@ function abrirSlides(on){
 }
 $('#sl-pill').addEventListener('click', e => { e.stopPropagation(); $('#menu-topicos').classList.add('oculto'); abrirSlides(); });
 function projetar(n){
-  projEstado.atual = n; projEstado.preta = false;
+  projEstado.atual = n; projEstado.preta = false; projEstado.t = Date.now();
   enviarEstado(); pintarSlides();
 }
 $('#sl-grade').addEventListener('click', e => { const b = e.target.closest('.sl-mini'); if (b) projetar(+b.dataset.n); });
 $('#sl-ant').addEventListener('click', () => { const n = projEstado.atual || 1; if (n > 1) projetar(n - 1); else projetar(1); });
 $('#sl-seg').addEventListener('click', () => { const n = projEstado.atual || 0; if (n < slidesP.length) projetar(n + 1); else aviso('Último slide'); });
-$('#sl-preta').addEventListener('click', () => { projEstado.preta = !projEstado.preta; enviarEstado(); pintarSlides(); });
+$('#sl-preta').addEventListener('click', () => { projEstado.preta = !projEstado.preta; projEstado.t = Date.now(); enviarEstado(); pintarSlides(); });
 
 function conectarProjetor(){
   if (canal || !sb()) return;
   canal = sb().channel('pregador-projetor', { config: { broadcast: { self: false } } });
   canal.on('broadcast', { event: 'vivo' }, () => { ultimoVivo = Date.now(); pintarSlides(); })
+       .on('broadcast', { event: 'estado' }, ({ payload: e }) => {
+         if (!e || (e.t || 0) <= (projEstado.t || 0)) return;
+         if (e.sermao_id === projEstado.sermao_id){ projEstado.atual = e.atual; projEstado.preta = e.preta; }
+         projEstado.t = e.t; pintarSlides();
+       })
        .on('broadcast', { event: 'pedido' }, () => { if ($('#pulpito').classList.contains('ativa') && slidesP.length) enviarEstado(); })
        .subscribe(st => { canalOk = st === 'SUBSCRIBED'; pintarSlides(); if (canalOk && slidesP.length) enviarEstado(); });
 }

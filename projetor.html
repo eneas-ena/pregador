@@ -62,7 +62,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 </div>
 
 <script>
-const VERSAO = '1.9.0';
+const VERSAO = '1.9.1';
 const SB_URL = 'https://ghjbljypxksubmcsvaig.supabase.co';
 const SB_KEY = 'sb_publishable_qXCYqg1WdmelY9D1mptZXg_U8NdoKby';
 const $ = s => document.querySelector(s);
@@ -110,7 +110,7 @@ function mostrar(url){
 /* conexão com o iPad */
 function estado(tipo, txt){ ['#estado', '#estado2'].forEach(s => { $(s).className = 'estado ' + tipo; $(s + ' span').textContent = txt; }); }
 const sb = window.supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
-let ultimoEstado = 0;
+let ultimoEstado = 0, ultimoToque = 0;
 const canal = sb.channel('pregador-projetor', { config: { broadcast: { self: false } } });
 canal.on('broadcast', { event: 'estado' }, ({ payload: e }) => {
   ultimoEstado = Date.now();
@@ -118,6 +118,9 @@ canal.on('broadcast', { event: 'estado' }, ({ payload: e }) => {
   estado('ok', 'iPad conectado' + (e.titulo ? ' · ' + e.titulo : ''));
   $('#espera').classList.add('fora');
   preCarregar(e.slides || []);
+  // vários aparelhos podem estar abertos: só vale o último toque de verdade
+  if ((e.t || 0) < ultimoToque) return;
+  ultimoToque = e.t || 0;
   const url = (!e.preta && e.atual && e.slides) ? e.slides[e.atual - 1] : null;
   mostrar(url);
 }).subscribe(st => {
