@@ -327,13 +327,21 @@ li > .nota-linha{margin:.3em 0}
 .ct-rot{font-size:11px;letter-spacing:.14em;color:var(--ouro);font-weight:700;white-space:nowrap}
 .ct-cab b{flex:1;font-size:21px}
 .ct-corpo{overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px 22px 20px;font-size:var(--gfs,24px);line-height:1.55;white-space:pre-wrap;cursor:pointer}
-.base-opc{display:none!important}
 .faltam{border:1.5px solid var(--t-laranja);background:rgba(245,153,74,.10);border-radius:12px;padding:12px 14px;margin-bottom:12px;font-size:14.5px;line-height:1.5}
 .faltam b{color:var(--t-laranja)}
 .faltam .refs{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
 .faltam .refs span{border:1px solid var(--t-laranja);border-radius:20px;padding:2px 10px;font-weight:600;font-size:13.5px}
 .faltam.ok{border-color:#3CB371;background:rgba(60,179,113,.08)}
 .meta.alerta{color:var(--t-laranja);font-weight:600}
+/* referência principal fixa no topo */
+.p-cab-tit{display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0}
+.p-base{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:8px;border:1px solid var(--ouro);background:rgba(201,162,39,.12);color:var(--ouro);font-weight:700;font-size:14px;max-width:100%;white-space:nowrap}
+.p-base span{overflow:hidden;text-overflow:ellipsis}
+.p-base svg{width:15px;height:15px;flex-shrink:0}
+.p-base.on{background:var(--ouro);color:#0F1B33}
+@media (max-width:900px){ .p-cab-tit .p-titulo{display:none} }
+.p-base-mob{display:none!important}
+@media (max-width:600px){ #p-base{display:none!important} .p-base-mob:not(.oculto){display:inline-flex!important;margin-left:10px;font-size:12.5px;padding:2px 8px;text-transform:none;letter-spacing:0} }
 </style>
 </head>
 <body>
@@ -411,7 +419,7 @@ li > .nota-linha{margin:.3em 0}
           </button>
         </h2>
         <div id="ed-faltam"></div>
-        <p class="dica" style="margin:-4px 0 10px">Digite a referência como ela aparece no sermão (ex.: <b>Fp 3.7-14</b>). Se você já colou esse texto em outro sermão, ele aparece sozinho. No púlpito, toque na referência dentro do sermão para ver o texto.</p>
+        <p class="dica" style="margin:-4px 0 10px">Digite a referência como ela aparece no sermão (ex.: <b>Fp 3.7-14</b>). Se você já colou esse texto em outro sermão, ele aparece sozinho. No púlpito, toque na referência dentro do sermão para ver o texto. A marcada como “referência principal” fica fixa no topo, abaixo do título.</p>
         <div id="ed-textos"></div>
         <datalist id="refs-salvas"></datalist>
       </div>
@@ -426,7 +434,13 @@ li > .nota-linha{margin:.3em 0}
       <button class="icone" id="p-voltar" title="Voltar">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
       </button>
-      <span class="p-titulo" id="p-titulo"></span>
+      <div class="p-cab-tit">
+        <span class="p-titulo" id="p-titulo"></span>
+        <button class="p-base oculto" id="p-base" title="Ver o texto principal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h7a3 3 0 0 1 3 3v13a2 2 0 0 0-2-2H2z"/><path d="M22 4h-7a3 3 0 0 0-3 3v13a2 2 0 0 1 2-2h8z"/></svg>
+          <span id="p-base-ref"></span>
+        </button>
+      </div>
     </div>
     <div class="p-relogios">
       <div class="relogio">
@@ -450,7 +464,7 @@ li > .nota-linha{margin:.3em 0}
     </div>
   </header>
   <div class="p-sub">
-    <span><span id="p-topico">Início</span><span class="versao v-mob" data-versao></span></span>
+    <span><span id="p-topico">Início</span><span class="versao v-mob" data-versao></span><button class="p-base p-base-mob oculto" id="p-base2"><span id="p-base-ref2"></span></button></span>
     <div class="p-direita">
       <div class="prox" id="p-prox">
         <button id="p-prox-ir"></button>
@@ -538,7 +552,7 @@ li > .nota-linha{margin:.3em 0}
 /* ============================================================
    PREGADOR — púlpito digital do Bispo
    ============================================================ */
-const VERSAO = '1.9.1';
+const VERSAO = '1.9.2';
 
 // Banco de dados (projeto quiz-biblico, schema "pregador") — já configurado
 const SB_URL = 'https://ghjbljypxksubmcsvaig.supabase.co';
@@ -831,7 +845,7 @@ function addLinhaTexto(t = { ref: '', texto: '' }, base = false){
   linha.innerHTML = `
     <div>
       <input class="t-ref" list="refs-salvas" placeholder="Ex.: Fp 3.7-14" value="${esc(t.ref)}">
-      <label class="base-opc"><input type="radio" name="base" ${base ? 'checked' : ''}> Versículo base</label>
+      <label class="base-opc"><input type="radio" name="base" ${base ? 'checked' : ''}> Referência principal</label>
       <div class="dica t-msg"></div>
     </div>
     <textarea class="t-texto" placeholder="Cole aqui o texto da NAA (só na primeira vez que usar esta referência)">${esc(t.texto)}</textarea>
@@ -1167,6 +1181,9 @@ async function abrirPulpito(id){
   $('#p-prox').classList.toggle('oculto', !topicos.length);
   // gaveta
   fecharTextoBiblico(); ajustarFolga();
+  { const tx = pAtual.textos || [], bi = Math.min(pAtual.base_idx || 0, tx.length - 1);
+    $('#p-base').classList.toggle('oculto', !tx.length); $('#p-base2').classList.toggle('oculto', !tx.length);
+    if (tx.length){ $('#p-base-ref').textContent = $('#p-base-ref2').textContent = tx[bi].ref; $('#p-base').dataset.i = bi; } }
   irPara('pulpito');
   // volta ao ponto onde parou (se recarregar no meio da pregação)
   const pos = lerLS('pregador.pos', {});
@@ -1230,8 +1247,16 @@ function abrirTextoBiblico(i){
   const cx = $('#caixa-texto'); cx._i = i;
   $('#ct-ref').textContent = t.ref; $('#ct-corpo').textContent = String(t.texto || '').trim() || '(O texto desta referência ainda não foi cadastrado.)'; $('#ct-corpo').scrollTop = 0;
   cx.classList.remove('oculto'); $('#ct-fundo').classList.remove('oculto');
+  $('#p-base').classList.toggle('on', String(i) === $('#p-base').dataset.i);
 }
-function fecharTextoBiblico(){ $('#caixa-texto').classList.add('oculto'); $('#ct-fundo').classList.add('oculto'); }
+function fecharTextoBiblico(){ $('#caixa-texto').classList.add('oculto'); $('#ct-fundo').classList.add('oculto'); $('#p-base').classList.remove('on'); }
+['#p-base', '#p-base2'].forEach(sel => $(sel).addEventListener('click', e => {
+  e.stopPropagation();
+  const i = +$('#p-base').dataset.i;
+  if (!$('#caixa-texto').classList.contains('oculto') && $('#caixa-texto')._i === i) return fecharTextoBiblico();
+  abrirTextoBiblico(i);
+}));
+
 $('#ct-fechar').addEventListener('click', fecharTextoBiblico);
 $('#ct-fundo').addEventListener('click', fecharTextoBiblico);
 (() => {   // tocar no texto fecha (rolar o texto não fecha)
