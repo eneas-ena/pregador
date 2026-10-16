@@ -342,6 +342,14 @@ li > .nota-linha{margin:.3em 0}
 @media (max-width:900px){ .p-cab-tit .p-titulo{display:none} }
 .p-base-mob{display:none!important}
 @media (max-width:600px){ #p-base{display:none!important} .p-base-mob:not(.oculto){display:inline-flex!important;margin-left:10px;font-size:12.5px;padding:2px 8px;text-transform:none;letter-spacing:0} }
+/* iPadOS: o sistema esmaece a faixa logo abaixo da barra de status no app instalado.
+   Deixamos essa faixa vazia para que título e relógios fiquem abaixo dela. */
+@media (display-mode: standalone){
+  .topo{padding-top:calc(env(safe-area-inset-top, 0px) + 34px)!important}
+  .p-topo{padding-top:calc(env(safe-area-inset-top, 0px) + 30px)!important}
+  .painel{padding-top:calc(env(safe-area-inset-top, 0px) + 40px)!important}
+  .caixa-texto{top:calc(env(safe-area-inset-top, 0px) + 120px)}
+}
 </style>
 </head>
 <body>
@@ -552,7 +560,7 @@ li > .nota-linha{margin:.3em 0}
 /* ============================================================
    PREGADOR — púlpito digital do Bispo
    ============================================================ */
-const VERSAO = '1.9.3';
+const VERSAO = '1.9.4';
 
 // Banco de dados (projeto quiz-biblico, schema "pregador") — já configurado
 const SB_URL = 'https://ghjbljypxksubmcsvaig.supabase.co';
