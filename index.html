@@ -350,6 +350,11 @@ li > .nota-linha{margin:.3em 0}
   .painel{padding-top:calc(env(safe-area-inset-top, 0px) + 40px)!important}
   .caixa-texto{top:calc(env(safe-area-inset-top, 0px) + 120px)}
 }
+/* menus de opções (salvar/arquivar/backup/restaurar) */
+.menu-opcoes{display:flex;flex-direction:column;gap:10px}
+.menu-opcoes .btn{flex-direction:column;align-items:flex-start;white-space:normal;text-align:left;gap:3px;padding:12px 14px;width:100%}
+.menu-opcoes .btn span{font-weight:400;font-size:13.5px;color:var(--txt2);line-height:1.4}
+.menu-opcoes .btn.prim span{color:#0F1B33}
 </style>
 </head>
 <body>
@@ -366,6 +371,10 @@ li > .nota-linha{margin:.3em 0}
     </div>
     <span id="sinc" class="sinc"><i></i><span>—</span></span>
     <button class="icone" data-tema title="Modo claro/escuro"></button>
+    <button class="btn" id="btn-backup" title="Backup e restauração">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
+      <span class="rl">Backup</span>
+    </button>
     <button class="btn" id="btn-historico" title="Histórico de pregações">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>
       <span class="rl">Histórico</span>
@@ -552,6 +561,7 @@ li > .nota-linha{margin:.3em 0}
   <p class="versao" data-versao></p>
 </aside>
 
+<input type="file" id="arq-restaurar" accept="application/json,.json" class="oculto">
 <div id="modal" class="modal-fundo oculto"><div class="modal" id="modal-caixa"></div></div>
 <div id="balao" class="oculto"></div>
 <div id="aviso"></div>
@@ -560,7 +570,7 @@ li > .nota-linha{margin:.3em 0}
 /* ============================================================
    PREGADOR — púlpito digital do Bispo
    ============================================================ */
-const VERSAO = '1.9.4';
+const VERSAO = '1.10.0';
 
 // Banco de dados (projeto quiz-biblico, schema "pregador") — já configurado
 const SB_URL = 'https://ghjbljypxksubmcsvaig.supabase.co';
@@ -788,6 +798,7 @@ async function desenharLista(){
         </button>
         <button class="btn" data-editar="${s.id}">Editar</button>
         ${hist[s.id] ? `<button class="btn" data-hist="${s.id}">Histórico</button>` : ''}
+        <button class="btn" data-mais="${s.id}" title="Salvar cópia ou arquivar" style="margin-left:auto">⋯</button>
       </div>
     </div>`).join('');
 }
@@ -796,6 +807,7 @@ $('#lista').addEventListener('click', e => {
   const p = e.target.closest('[data-pregar]'); if (p) return abrirPulpito(p.dataset.pregar);
   const ed = e.target.closest('[data-editar]'); if (ed) return abrirEditor(ed.dataset.editar);
   const hi = e.target.closest('[data-hist]'); if (hi) return abrirHistorico(hi.dataset.hist);
+  const ma = e.target.closest('[data-mais]'); if (ma) return menuSermao(ma.dataset.mais);
 });
 
 /* ===================== EDITOR ===================== */
@@ -1796,6 +1808,222 @@ async function abrirHistorico(sermaoId){
   };
 }
 $('#btn-historico').addEventListener('click', () => abrirHistorico(null));
+
+/* ===================== SALVAR · ARQUIVAR · BACKUP · RESTAURAR ===================== */
+// Mesmo formato do Pregador Visual (versão multiusuário): os arquivos servem nos dois apps.
+const ehIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const blobParaDataUrl = b => new Promise((ok, erro) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = () => erro(r.error); r.readAsDataURL(b); });
+const dataUrlParaBlob = async u => (await fetch(u)).blob();
+const nomeArquivo = t => String(t || 'sermao').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-').slice(0, 60) || 'sermao';
+const hoje = () => new Date().toISOString().slice(0, 10);
+const semInterno = o => { const c = { ...o }; delete c._pendente; delete c.user_id; return c; };
+// só os campos que existem no banco deste app (um arquivo do outro app pode ter campos a mais)
+const CAMPOS = {
+  sermoes:   ['id', 'titulo', 'data_pregacao', 'culto', 'conteudo_html', 'textos', 'base_idx', 'slides', 'slides_v', 'excluido', 'criado_em', 'atualizado_em'],
+  textos:    ['chave', 'ref', 'texto', 'versao', 'atualizado_em'],
+  pregacoes: ['id', 'sermao_id', 'titulo', 'data', 'culto', 'local', 'duracao_seg', 'topicos', 'obs', 'excluido', 'criado_em', 'atualizado_em']
+};
+const soCampos = (loja, o) => Object.fromEntries(CAMPOS[loja].filter(k => o[k] !== undefined).map(k => [k, o[k]]));
+
+// mostra "Arquivo pronto" e entrega quando você tocar (o iPad só abre o "Salvar" logo após um toque)
+function entregarArquivo(partes, nome){
+  const arq = new File(partes, nome, { type: 'application/json' });
+  const tam = arq.size > 1048576 ? (arq.size / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(arq.size / 1024)) + ' KB';
+  return new Promise(fim => {
+    abrirModal(`
+      <h2>Arquivo pronto</h2>
+      <p class="sub" style="word-break:break-all">${esc(nome)} · ${tam}</p>
+      <p style="line-height:1.55;margin-bottom:14px">${ehIOS ? 'Toque em <b>Salvar o arquivo</b> e escolha <b>“Salvar em Arquivos”</b> (iCloud Drive ou No meu iPad).' : 'Toque em <b>Salvar o arquivo</b>. Ele vai para a pasta de Downloads.'}<br>Guarde-o em lugar seguro.</p>
+      <div class="acoes"><button class="btn" id="ea-cancelar">Cancelar</button><button class="btn prim" id="ea-salvar">Salvar o arquivo</button></div>`);
+    $('#ea-cancelar').onclick = () => { fecharModal(); fim(false); };
+    $('#ea-salvar').onclick = async () => {
+      if (ehIOS && navigator.canShare && navigator.canShare({ files: [arq] })){
+        try { await navigator.share({ files: [arq], title: nome }); fecharModal(); return fim(true); }
+        catch (e){ if (e && e.name === 'AbortError') return; }
+      }
+      const a = document.createElement('a'); a.href = URL.createObjectURL(arq); a.download = nome;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+      fecharModal(); fim(true);
+    };
+  });
+}
+// slides do sermão embutidos no arquivo (do aparelho ou, se não tiver, da nuvem)
+async function slidesParaArquivo(s, progresso){
+  const lista = s.slides || []; if (!lista.length) return { slides: [], faltou: 0 };
+  const locais = Object.fromEntries((await dbSlidesDe(s.id)).map(r => [r.n, r]));
+  const out = []; let faltou = 0;
+  for (const x of lista){
+    if (progresso) progresso(x.n, lista.length);
+    let blob = locais[x.n] && locais[x.n].full;
+    if (!blob && navigator.onLine){ try { const r = await fetch(urlSlide(x.path)); if (r.ok) blob = await r.blob(); } catch {} }
+    if (blob) out.push({ n: x.n, jpg: await blobParaDataUrl(blob) }); else faltou++;
+  }
+  return { slides: out, faltou };
+}
+async function pacoteDoSermao(s, comSlides, progresso){
+  const refs = new Set((s.textos || []).map(t => chaveRef(t.ref)));
+  const textos = (await dbTodos('textos')).filter(t => refs.has(t.chave)).map(semInterno);
+  const pregacoes = (await dbTodos('pregacoes')).filter(h => h.sermao_id === s.id && !h.excluido).map(semInterno);
+  const sl = comSlides ? await slidesParaArquivo(s, progresso) : { slides: [], faltou: 0 };
+  return { item: { sermao: semInterno(s), slides: sl.slides, pregacoes }, textos, faltou: sl.faltou };
+}
+const cabecalho = tipo => ({ app: 'Pregador Visual', origem: 'Pregador (pessoal)', tipo, versao_app: VERSAO, formato: 1, exportado_em: agora(), pastor: 'Bispo Enéas' });
+
+async function exportarSermao(id, depois){
+  const s = await dbPegar('sermoes', id); if (!s) return;
+  const temSlides = (s.slides || []).length;
+  aviso('Preparando o arquivo…', 8000);
+  const p = await pacoteDoSermao(s, true, (i, n) => aviso(`Preparando slide ${i} de ${n}…`, 8000));
+  if (p.faltou && !confirm(`${p.faltou} de ${temSlides} slide(s) não estão neste aparelho nem foram encontrados na nuvem${navigator.onLine ? '' : ' (sem internet)'}.\n\nSalvar o arquivo sem eles?`)) return false;
+  const dados = { ...cabecalho('sermao'), sermoes: [p.item], textos: p.textos };
+  const ok = await entregarArquivo([JSON.stringify(dados)], `Sermao-${nomeArquivo(s.titulo)}-${s.data_pregacao || hoje()}.json`);
+  if (ok && !depois) aviso('Arquivo do sermão pronto');
+  return ok;
+}
+// tira o sermão do app (e os slides da nuvem): libera espaço. O arquivo salvo traz tudo de volta.
+async function removerSermao(s){
+  const antigos = (s.slides || []).map(x => x.path);
+  if (antigos.length) gravarLS('pregador.apagarSlides', [...lerLS('pregador.apagarSlides', []), ...antigos]);
+  await dbApagarSlides(s.id);
+  await dbGravar('sermoes', { ...s, excluido: true, slides: [], slides_v: null, atualizado_em: agora(), _pendente: true });
+}
+async function arquivarSermao(id){
+  const s = await dbPegar('sermoes', id); if (!s) return;
+  const ok = await exportarSermao(id, true);
+  if (!ok) return;
+  if (!confirm(`O arquivo de “${s.titulo}” foi entregue.\n\nConfira se ele foi salvo (em Arquivos, Downloads ou onde você escolheu) antes de continuar.\n\nRemover agora o sermão do app e liberar o espaço dos slides?`)) return;
+  await removerSermao(s);
+  aviso('Sermão arquivado. Para trazê-lo de volta: Backup › Restaurar.', 5000);
+  desenharLista(); sincronizar();
+}
+const BOTAO_FECHAR = '<button class="icone" onclick="fecharModal()" title="Fechar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>';
+function menuSermao(id){
+  dbPegar('sermoes', id).then(s => {
+    if (!s) return;
+    const n = (s.slides || []).length;
+    abrirModal(`
+      <h2>${esc(s.titulo)} ${BOTAO_FECHAR}</h2>
+      <p class="sub">${n ? n + ' slide(s)' : 'Sem slides'}</p>
+      <div class="menu-opcoes">
+        <button class="btn" id="ms-exportar"><b>💾 Salvar uma cópia no aparelho</b><span>Arquivo com o texto, marcações, notas, textos bíblicos, histórico${n ? ' e slides' : ''}. O sermão continua no app. Serve também para levar ao Pregador Visual.</span></button>
+        <button class="btn" id="ms-arquivar"><b>📦 Arquivar (salvar e liberar espaço)</b><span>Salva o arquivo e depois tira o sermão do app${n ? ', apagando os slides da nuvem' : ''}. Volta igualzinho em Backup › Restaurar.</span></button>
+      </div>`);
+    $('#ms-exportar').onclick = () => { fecharModal(); exportarSermao(id); };
+    $('#ms-arquivar').onclick = () => { fecharModal(); arquivarSermao(id); };
+  });
+}
+function menuBackup(){
+  const ult = lerLS('pregador.ultimoBackup', null);
+  abrirModal(`
+    <h2>Backup e restauração ${BOTAO_FECHAR}</h2>
+    <p class="sub">${ult ? 'Último backup neste aparelho: ' + new Date(ult).toLocaleDateString('pt-BR') : 'Nenhum backup feito neste aparelho ainda.'}</p>
+    <div class="menu-opcoes">
+      <button class="btn" id="bk-completo"><b>💾 Backup completo (com slides)</b><span>Todos os sermões com marcações, notas, textos bíblicos, histórico e slides. Arquivo maior.</span></button>
+      <button class="btn" id="bk-leve"><b>📝 Backup sem os slides</b><span>Tudo, menos as imagens dos slides. Arquivo pequeno.</span></button>
+      <button class="btn" id="bk-restaurar"><b>⤴ Restaurar backup ou sermão salvo</b><span>Escolha um arquivo .json salvo por este Pregador ou pelo Pregador Visual.</span></button>
+    </div>`);
+  $('#bk-completo').onclick = () => { fecharModal(); fazerBackup(true); };
+  $('#bk-leve').onclick = () => { fecharModal(); fazerBackup(false); };
+  $('#bk-restaurar').onclick = () => { fecharModal(); $('#arq-restaurar').click(); };
+}
+$('#btn-backup').addEventListener('click', menuBackup);
+
+async function fazerBackup(comSlides){
+  const sermoes = (await dbTodos('sermoes')).filter(s => !s.excluido);
+  if (!sermoes.length) return aviso('Ainda não há sermões para o backup.');
+  const itens = []; let faltou = 0;
+  for (let i = 0; i < sermoes.length; i++){
+    aviso(`Preparando o backup: sermão ${i + 1} de ${sermoes.length}…`, 10000);
+    const p = await pacoteDoSermao(sermoes[i], comSlides);
+    itens.push(p.item); faltou += p.faltou;
+  }
+  const textos = (await dbTodos('textos')).map(semInterno);
+  const soltas = (await dbTodos('pregacoes')).filter(h => !h.excluido && !sermoes.some(s => s.id === h.sermao_id)).map(semInterno);
+  if (faltou && !confirm(`${faltou} slide(s) não foram encontrados (nem no aparelho, nem na nuvem). Continuar o backup sem eles?`)) return;
+  const dados = { ...cabecalho('backup'), com_slides: comSlides, sermoes: itens, textos, pregacoes_soltas: soltas };
+  const ok = await entregarArquivo([JSON.stringify(dados)], `Backup-Pregador-${hoje()}${comSlides ? '' : '-sem-slides'}.json`);
+  if (ok){ gravarLS('pregador.ultimoBackup', agora()); aviso(`Backup pronto: ${itens.length} sermão(ões)`, 4000); }
+}
+
+const miniatura = async blob => {
+  const img = await createImageBitmap(blob);
+  const tw = 360, th = Math.round(img.height * tw / img.width);
+  const c = document.createElement('canvas'); c.width = tw; c.height = th; c.getContext('2d').drawImage(img, 0, 0, tw, th);
+  img.close && img.close();
+  const t = await paraBlob(c, 0.72); c.width = c.height = 0; return t;
+};
+async function lerArquivoRestauracao(arq){
+  let dados;
+  try { dados = JSON.parse(await arq.text()); } catch { return aviso('Este arquivo não é um backup do Pregador.', 5000); }
+  if (!dados || dados.app !== 'Pregador Visual' || !Array.isArray(dados.sermoes)) return aviso('Este arquivo não é um backup do Pregador.', 5000);
+  const locais = Object.fromEntries((await dbTodos('sermoes')).map(s => [s.id, s]));
+  const existem = dados.sermoes.filter(it => locais[it.sermao.id] && !locais[it.sermao.id].excluido);
+  const nSl = dados.sermoes.reduce((t, it) => t + (it.slides || []).length, 0);
+  const quando = dados.exportado_em ? new Date(dados.exportado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '?';
+  const deOnde = dados.origem === 'Pregador (pessoal)' ? 'deste Pregador' : 'do Pregador Visual';
+  abrirModal(`
+    <h2>${dados.tipo === 'backup' ? 'Restaurar backup' : 'Trazer sermão'} ${BOTAO_FECHAR}</h2>
+    <p class="sub">Arquivo ${deOnde} de ${esc(quando)}${dados.pastor ? ' · ' + esc(dados.pastor) : ''}</p>
+    <p style="line-height:1.55;margin-bottom:12px">${dados.sermoes.length === 1 ? '<b>' + esc(dados.sermoes[0].sermao.titulo) + '</b>' : `<b>${dados.sermoes.length} sermões</b>`}${nSl ? ` · ${nSl} slide(s)` : ''}${(dados.textos || []).length ? ` · ${dados.textos.length} texto(s) bíblico(s)` : ''}.</p>
+    ${existem.length ? `<p class="dica" style="margin-bottom:12px">${existem.length} ${existem.length > 1 ? 'destes sermões já estão' : 'deste(s) sermão(ões) já está'} no app.</p>` : ''}
+    <div class="menu-opcoes">
+      ${existem.length ? `<button class="btn" id="rs-faltam"><b>Acrescentar só o que falta</b><span>Os sermões que já estão no app ficam como estão.</span></button>
+      <button class="btn" id="rs-substituir"><b>Substituir pelo arquivo</b><span>Os que já existem voltam a ficar exatamente como no arquivo.</span></button>
+      <button class="btn" id="rs-copia"><b>Trazer como cópia</b><span>Cria cópias novas, sem mexer nos atuais.</span></button>`
+      : `<button class="btn prim" id="rs-faltam"><b>Restaurar</b></button>`}
+    </div>`);
+  const ir = modo => { fecharModal(); restaurar(dados, modo); };
+  $('#rs-faltam').onclick = () => ir('faltam');
+  if ($('#rs-substituir')) $('#rs-substituir').onclick = () => ir('substituir');
+  if ($('#rs-copia')) $('#rs-copia').onclick = () => ir('copia');
+}
+async function restaurar(dados, modo){
+  const locais = Object.fromEntries((await dbTodos('sermoes')).map(s => [s.id, s]));
+  const histLocal = new Set((await dbTodos('pregacoes')).map(h => h.id));
+  let feitos = 0, pulados = 0, slidesNovos = 0;
+  for (let i = 0; i < dados.sermoes.length; i++){
+    const it = dados.sermoes[i], orig = soCampos('sermoes', it.sermao);
+    const atual = locais[orig.id], vivo = atual && !atual.excluido;
+    if (vivo && modo === 'faltam'){ pulados++; continue; }
+    aviso(`Restaurando ${i + 1} de ${dados.sermoes.length}…`, 10000);
+    const copia = vivo && modo === 'copia';
+    const id = copia ? uid() : orig.id;
+    const s = { textos: [], base_idx: 0, ...orig, id, titulo: copia ? orig.titulo + ' (cópia)' : orig.titulo, excluido: false, atualizado_em: agora(), _pendente: true };
+    if (!copia && atual) s.criado_em = atual.criado_em || s.criado_em;
+    if (!s.criado_em) s.criado_em = agora();
+    // slides: troca os antigos pelos do arquivo
+    if (vivo && !copia){
+      const antigos = (atual.slides || []).map(x => x.path);
+      if (antigos.length) gravarLS('pregador.apagarSlides', [...lerLS('pregador.apagarSlides', []), ...antigos]);
+      await dbApagarSlides(id);
+    }
+    const sl = it.slides || [];
+    if (sl.length){
+      const v = Date.now() + i, recs = [];
+      for (const x of sl){
+        const full = await dataUrlParaBlob(x.jpg);
+        recs.push({ chave: `${id}/${x.n}`, sermao_id: id, n: x.n, full, thumb: await miniatura(full), path: `${id}/${v}-${x.n}.jpg`, enviado: false });
+      }
+      await dbGravar('slides', recs);
+      s.slides = recs.map(r => ({ n: r.n, path: r.path })); s.slides_v = v; slidesNovos += recs.length;
+    } else { s.slides = []; s.slides_v = null; }
+    await dbGravar('sermoes', s);
+    const hs = (it.pregacoes || []).filter(h => copia || !histLocal.has(h.id)).map(h => ({ ...soCampos('pregacoes', h), id: copia ? uid() : h.id, sermao_id: id, excluido: false, _pendente: true, atualizado_em: agora() }));
+    if (hs.length) await dbGravar('pregacoes', hs);
+    feitos++;
+  }
+  // textos bíblicos: acrescenta os que faltam na biblioteca
+  const bib = new Set((await dbTodos('textos')).map(t => t.chave));
+  const tx = (dados.textos || []).map(t => ({ versao: 'NAA', ...soCampos('textos', t), chave: chaveRef(t.ref || t.chave) }))
+    .filter(t => t.ref && t.texto && (modo === 'substituir' || !bib.has(t.chave))).map(t => ({ ...t, atualizado_em: agora(), _pendente: true }));
+  if (tx.length) await dbGravar('textos', tx);
+  const soltas = (dados.pregacoes_soltas || []).filter(h => !histLocal.has(h.id)).map(h => ({ ...soCampos('pregacoes', h), excluido: false, _pendente: true, atualizado_em: agora() }));
+  if (soltas.length) await dbGravar('pregacoes', soltas);
+  aviso(`${feitos} sermão(ões) restaurado(s)${pulados ? ` · ${pulados} já estavam no app` : ''}${slidesNovos ? ' · enviando os slides…' : ''}`, 5000);
+  irPara('inicio'); desenharLista(); sincronizar();
+}
+$('#arq-restaurar').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) lerArquivoRestauracao(f); });
 
 /* ===================== CONTROLE DE APRESENTAÇÃO / TECLADO ===================== */
 function topicoAnterior(){
